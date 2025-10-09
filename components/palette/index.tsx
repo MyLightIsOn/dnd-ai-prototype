@@ -1,5 +1,5 @@
 import React from "react";
-import PaletteItem from "../pallette-item";
+import PaletteItem from "../palette-item";
 
 function Pallette() {
   return (
