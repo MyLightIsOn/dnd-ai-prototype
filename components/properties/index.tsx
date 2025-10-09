@@ -1,24 +1,8 @@
 import React from "react";
-import type { Node } from "@xyflow/react";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
-
-// --- Types ---
-type AgentData = {
-  name?: string;
-  model?: string;
-  prompt?: string;
-  preview?: string;
-};
-type ToolData = {
-  name?: string;
-  kind?: string;
-  config?: { endpoint?: string };
-};
-type OutputData = { name?: string; preview?: string };
-type NodeData = AgentData | ToolData | OutputData;
-
-type TypedNode = Node<NodeData>;
+import type { AgentData, ToolData, OutputData } from "@/types";
+import type { TypedNode } from "@/types";
 
 function PropertiesPanel({
   selected,

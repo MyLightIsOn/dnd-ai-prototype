@@ -1,20 +1,6 @@
 import React from "react";
 import type { NodeProps, NodeTypes } from "@xyflow/react";
-
-// --- Types (kept local to avoid repo-wide churn) ---
-export type AgentData = {
-  name?: string;
-  model?: string;
-  prompt?: string;
-  preview?: string;
-};
-export type ToolData = {
-  name?: string;
-  kind?: string;
-  config?: { endpoint?: string };
-};
-export type OutputData = { name?: string; preview?: string };
-export type NodeData = AgentData | ToolData | OutputData;
+import type { AgentData, ToolData, OutputData } from "@/types";
 
 function NodeChrome({
   title,
@@ -40,39 +26,46 @@ function NodeChrome({
   );
 }
 
-export const AgentNode: React.FC<NodeProps<AgentData>> = ({ data }) => {
+export const AgentNode: React.FC<NodeProps> = ({ data }) => {
+  const d = (data || {}) as AgentData;
   return (
     <NodeChrome
-      title={data.name || "Agent"}
-      subtitle={data.model || "model"}
+      title={d.name || "Agent"}
+      subtitle={d.model || "model"}
       color="bg-indigo-500"
     >
       <div className="text-gray-700 line-clamp-3">
-        {data.prompt || "Prompt goes here…"}
+        {d.prompt || "Prompt goes here…"}
       </div>
     </NodeChrome>
   );
 };
 
-export const ToolNode: React.FC<NodeProps<ToolData>> = ({ data }) => (
-  <NodeChrome title={data.name || "Tool"} subtitle={data.kind || "HTTP/DB/Code"} color="bg-emerald-500">
-    <div className="text-gray-700">
-      {data.config?.endpoint ? (
-        <div className="text-[11px] break-all">{data.config.endpoint}</div>
-      ) : (
-        <div className="text-[11px]">No config</div>
-      )}
-    </div>
-  </NodeChrome>
-);
+export const ToolNode: React.FC<NodeProps> = ({ data }) => {
+  const d = (data || {}) as ToolData;
+  return (
+    <NodeChrome title={d.name || "Tool"} subtitle={d.kind || "HTTP/DB/Code"} color="bg-emerald-500">
+      <div className="text-gray-700">
+        {d.config?.endpoint ? (
+          <div className="text-[11px] break-all">{d.config.endpoint}</div>
+        ) : (
+          <div className="text-[11px]">No config</div>
+        )}
+      </div>
+    </NodeChrome>
+  );
+};
 
-export const OutputNode: React.FC<NodeProps<OutputData>> = ({ data }) => (
-  <NodeChrome title={data.name || "Output"} subtitle="Terminal" color="bg-slate-600">
-    <div className="text-[11px] text-gray-700 whitespace-pre-wrap max-h-24 overflow-auto">
-      {data.preview || "Will show the final result."}
-    </div>
-  </NodeChrome>
-);
+export const OutputNode: React.FC<NodeProps> = ({ data }) => {
+  const d = (data || {}) as OutputData;
+  return (
+    <NodeChrome title={d.name || "Output"} subtitle="Terminal" color="bg-slate-600">
+      <div className="text-[11px] text-gray-700 whitespace-pre-wrap max-h-24 overflow-auto">
+        {d.preview || "Will show the final result."}
+      </div>
+    </NodeChrome>
+  );
+};
 
 export const nodeTypes: NodeTypes = {
   agent: AgentNode,

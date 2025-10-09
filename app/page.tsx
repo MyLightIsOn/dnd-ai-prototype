@@ -14,56 +14,11 @@ import Console from "@/components/console";
 import { Settings } from "lucide-react";
 import React, { useMemo, useState } from "react";
 
-// --- Types ---
-type AgentData = {
-  name?: string;
-  model?: string;
-  prompt?: string;
-  preview?: string;
-};
-type ToolData = {
-  name?: string;
-  kind?: string;
-  config?: { endpoint?: string };
-};
-type OutputData = { name?: string; preview?: string };
-type NodeData = AgentData | ToolData | OutputData;
+import { topoSort } from "@/lib/topoSort";
+import { exportJSON } from "@/lib/exportJSON";
+import { importJSON } from "@/lib/importJSON";
 
-type TypedNode = Node<NodeData>;
-
-type Id = string;
-
-// Utility: simple topological ordering; detects cycles
-function topoSort(
-  nodes: TypedNode[],
-  edges: Edge[],
-): { order: Id[]; hasCycle: boolean } {
-  const inDeg = new Map<Id, number>();
-  const out = new Map<Id, Id[]>();
-  nodes.forEach((n) => {
-    inDeg.set(n.id, 0);
-    out.set(n.id, []);
-  });
-  edges.forEach((e) => {
-    if (!inDeg.has(e.target as Id)) inDeg.set(e.target as Id, 0);
-    inDeg.set(e.target as Id, (inDeg.get(e.target as Id) || 0) + 1);
-    if (!out.has(e.source as Id)) out.set(e.source as Id, []);
-    out.get(e.source as Id)!.push(e.target as Id);
-  });
-  const q: Id[] = [];
-  inDeg.forEach((v, k) => v === 0 && q.push(k));
-  const order: Id[] = [];
-  while (q.length) {
-    const k = q.shift() as Id;
-    order.push(k);
-    (out.get(k) || []).forEach((t) => {
-      inDeg.set(t, (inDeg.get(t) || 0) - 1);
-      if (inDeg.get(t) === 0) q.push(t);
-    });
-  }
-  if (order.length !== nodes.length) return { order: [], hasCycle: true };
-  return { order, hasCycle: false };
-}
+import type { AgentData, ToolData, OutputData, TypedNode, Id } from "@/types";
 
 export default function App() {
   const [nodes, setNodes] = useState<TypedNode[]>([]);
@@ -102,43 +57,6 @@ export default function App() {
     setEdges([]);
     setLogs([]);
     setSelectedId(null);
-  };
-
-  const exportJSON = () => {
-    const payload = JSON.stringify({ nodes, edges }, null, 2);
-    const blob = new Blob([payload], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "workflow.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const importJSON: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const text = typeof reader.result === "string" ? reader.result : "";
-        const parsed = JSON.parse(text) as {
-          nodes?: TypedNode[];
-          edges?: Edge[];
-        };
-        setNodes(parsed.nodes || []);
-        setEdges(
-          (parsed.edges || []).map((ed) => ({
-            ...ed,
-            markerEnd: { type: MarkerType.ArrowClosed },
-          })),
-        );
-      } catch (err) {
-        console.log(err);
-        alert("Invalid JSON");
-      }
-    };
-    reader.readAsText(file);
   };
 
   const addSample = () => {
@@ -253,8 +171,14 @@ export default function App() {
           <Header
             onRun={run}
             onClear={clearAll}
-            onExport={exportJSON}
-            onImport={importJSON}
+            onExport={() => {
+              exportJSON({ nodes, edges });
+            }}
+            onImport={(e) => {
+              importJSON({ e, nodes, setNodes, setEdges }).then((r) =>
+                console.log(r),
+              );
+            }}
             onAddSample={addSample}
           />
           <Palette />

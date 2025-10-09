@@ -1,20 +1,6 @@
 import React from "react";
 import { Plus } from "lucide-react";
-
-// --- Types ---
-type AgentData = {
-  name?: string;
-  model?: string;
-  prompt?: string;
-  preview?: string;
-};
-type ToolData = {
-  name?: string;
-  kind?: string;
-  config?: { endpoint?: string };
-};
-type OutputData = { name?: string; preview?: string };
-type NodeData = AgentData | ToolData | OutputData;
+import type { NodeData } from "@/types";
 
 function PaletteItem({
   type,
