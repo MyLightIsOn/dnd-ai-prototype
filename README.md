@@ -5,8 +5,6 @@ It is a work in progress...
 <img src="docs/screenshot.png" alt="screenshot" width="640" />
 
 ---
-
-````markdown
 # 🧠 Multi-Agent Workflow Studio
 
 > A visual playground for designing, running, and sharing multi-agent AI workflows — no backend, no setup, no hassle.
