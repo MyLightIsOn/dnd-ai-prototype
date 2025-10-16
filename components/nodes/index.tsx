@@ -1,7 +1,7 @@
 import React from "react";
 import type { NodeProps, NodeTypes } from "@xyflow/react";
 import { Position, Handle } from "@xyflow/react";
-import type { AgentData, ToolData, OutputData } from "@/types";
+import type { AgentData, ToolData, OutputData, PromptData } from "@/types";
 
 function NodeChrome({
   title,
@@ -38,11 +38,11 @@ export const AgentNode: React.FC<NodeProps> = ({ data }) => {
   return (
     <NodeChrome
       title={d.name || "Agent"}
-      subtitle={d.model || "model"}
+      subtitle={"model"}
       color="bg-indigo-500"
     >
       <div className="text-gray-700 line-clamp-3">
-        {d.prompt || "Prompt goes here…"}
+        {d.model || "Model Type"}
       </div>
     </NodeChrome>
   );
@@ -54,7 +54,7 @@ export const ToolNode: React.FC<NodeProps> = ({ data }) => {
     <NodeChrome
       title={d.name || "Tool"}
       subtitle={d.kind || "HTTP/DB/Code"}
-      color="bg-emerald-500"
+      color="bg-orange-600"
     >
       <div className="text-gray-700">
         {d.config?.endpoint ? (
@@ -82,8 +82,24 @@ export const ResultNode: React.FC<NodeProps> = ({ data }) => {
   );
 };
 
+export const PromptNode: React.FC<NodeProps> = ({ data }) => {
+  const d = (data || {}) as PromptData;
+  return (
+    <NodeChrome
+      title={d.name || "Prompt"}
+      subtitle="Input"
+      color="bg-emerald-500"
+    >
+      <div className="text-[11px] text-gray-700 whitespace-pre-wrap max-h-24 overflow-auto ">
+        {d.text || "Prompt goes here"}
+      </div>
+    </NodeChrome>
+  );
+};
+
 export const nodeTypes: NodeTypes = {
   agent: AgentNode,
   tool: ToolNode,
   result: ResultNode,
+  prompt: PromptNode,
 };

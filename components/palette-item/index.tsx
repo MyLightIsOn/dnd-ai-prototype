@@ -7,7 +7,7 @@ function PaletteItem({
   label,
   meta,
 }: {
-  type: "agent" | "tool" | "result";
+  type: "agent" | "tool" | "result" | "prompt";
   label: string;
   meta?: NodeData;
 }) {

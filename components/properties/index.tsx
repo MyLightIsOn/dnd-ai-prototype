@@ -1,7 +1,7 @@
 import React from "react";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
-import type { AgentData, ToolData, OutputData } from "@/types";
+import type { AgentData, ToolData, OutputData, PromptData } from "@/types";
 import type { TypedNode } from "@/types";
 
 function PropertiesPanel({
@@ -9,7 +9,9 @@ function PropertiesPanel({
   onChange,
 }: {
   selected: TypedNode | null | undefined;
-  onChange: (patch: Partial<AgentData & ToolData & OutputData>) => void;
+  onChange: (
+    patch: Partial<AgentData & ToolData & OutputData & PromptData>,
+  ) => void;
 }) {
   if (!selected)
     return (
@@ -39,12 +41,16 @@ function PropertiesPanel({
               onChange={(e) => onChange({ model: e.target.value })}
             />
           </div>
+        </>
+      )}
+      {type === "prompt" && (
+        <>
           <div className="grid gap-2">
             <label className="text-xs text-gray-600">Prompt</label>
             <Textarea
               rows={5}
-              value={(data as AgentData).prompt || ""}
-              onChange={(e) => onChange({ prompt: e.target.value })}
+              value={(data as PromptData).text || ""}
+              onChange={(e) => onChange({ text: e.target.value })}
             />
           </div>
         </>

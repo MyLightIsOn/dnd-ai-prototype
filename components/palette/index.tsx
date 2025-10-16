@@ -8,12 +8,16 @@ function Pallette() {
         Palette
       </div>
       <PaletteItem
+        type={"prompt"}
+        label={"Prompt"}
+        meta={{ name: "Prompt", text: "Your prompt here" }}
+      />
+      <PaletteItem
         type="agent"
         label="Agent"
         meta={{
           name: "Agent",
           model: "gpt-4o-mini",
-          prompt: "Your prompt here",
         }}
       />
       <PaletteItem
