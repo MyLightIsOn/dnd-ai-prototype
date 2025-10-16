@@ -74,7 +74,7 @@ function PropertiesPanel({
           </div>
         </>
       )}
-      {type === "output" && (
+      {type === "result" && (
         <div className="grid gap-2">
           <label className="text-xs text-gray-600">Label</label>
           <Input

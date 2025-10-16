@@ -2,7 +2,10 @@ import type { Edge, Node } from "@xyflow/react";
 import { MarkerType } from "@xyflow/react";
 import type { NodeData } from "@/types";
 
-export function createSampleGraph(): { nodes: Node<NodeData>[]; edges: Edge[] } {
+export function createSampleGraph(): {
+  nodes: Node<NodeData>[];
+  edges: Edge[];
+} {
   const a1: Node<NodeData> = {
     id: crypto.randomUUID(),
     type: "agent",
@@ -35,7 +38,7 @@ export function createSampleGraph(): { nodes: Node<NodeData>[]; edges: Edge[] } 
   } as Node<NodeData>;
   const out: Node<NodeData> = {
     id: crypto.randomUUID(),
-    type: "output",
+    type: "result",
     position: { x: 1000, y: 120 },
     data: { name: "Final Output", preview: "" },
   } as Node<NodeData>;

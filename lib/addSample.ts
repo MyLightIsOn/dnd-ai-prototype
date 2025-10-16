@@ -38,7 +38,7 @@ export function addSample(
   } as TypedNode;
   const out: TypedNode = {
     id: crypto.randomUUID(),
-    type: "output",
+    type: "result",
     position: { x: 1000, y: 120 },
     data: { name: "Final Output", preview: "" },
   } as TypedNode;

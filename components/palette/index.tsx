@@ -25,7 +25,7 @@ function Pallette() {
           config: { endpoint: "https://api.example.com" },
         }}
       />
-      <PaletteItem type="output" label="Output" meta={{ name: "Output" }} />
+      <PaletteItem type="result" label="Result" meta={{ name: "Result" }} />
       <div className="pt-2 text-[11px] text-gray-500">
         Drag items onto the canvas. Connect nodes by dragging from a handle edge
         to another node.

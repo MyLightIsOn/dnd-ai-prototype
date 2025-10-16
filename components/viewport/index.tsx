@@ -10,7 +10,6 @@ import {
   useReactFlow,
   MarkerType,
 } from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
 import type {
   Node,
   Edge,
@@ -52,7 +51,10 @@ function ViewPort({
   const onConnect = useCallback(
     (params: Connection) =>
       setEdges((edgesSnapshot) =>
-        addEdge({ ...params, markerEnd: { type: MarkerType.ArrowClosed } }, edgesSnapshot),
+        addEdge(
+          { ...params, markerEnd: { type: MarkerType.ArrowClosed } },
+          edgesSnapshot,
+        ),
       ),
     [setEdges],
   );
@@ -60,21 +62,26 @@ function ViewPort({
   const onDrop = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault();
-      const bounds = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+      const bounds = (
+        event.currentTarget as HTMLDivElement
+      ).getBoundingClientRect();
       const data = event.dataTransfer.getData("application/reactflow");
       if (!data) return;
       const { type, meta } = JSON.parse(data) as {
-        type: "agent" | "tool" | "output";
+        type: "agent" | "tool" | "result";
         meta?: any;
       };
-      const position = rf.screenToFlowPosition({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+      const position = rf.screenToFlowPosition({
+        x: event.clientX - bounds.left,
+        y: event.clientY - bounds.top,
+      });
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const label =
         type === "agent"
           ? `Agent ${nodes.filter((n) => n.type === "agent").length + 1}`
           : type === "tool"
-          ? `Tool ${nodes.filter((n) => n.type === "tool").length + 1}`
-          : `Output`;
+            ? `Tool ${nodes.filter((n) => n.type === "tool").length + 1}`
+            : `Output`;
       const newNode: Node = {
         id,
         type,

@@ -1,10 +1,5 @@
 "use client";
-import {
-  ReactFlowProvider,
-  type Edge,
-  type Node,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
+import { ReactFlowProvider, type Edge, type Node } from "@xyflow/react";
 import Header from "@/components/header";
 import ViewPort from "@/components/viewport";
 import Palette from "@/components/palette";
@@ -18,7 +13,7 @@ import { importJSON } from "@/lib/importJSON";
 import { addSample as addSampleLib } from "@/lib/addSample";
 import { run as runLib } from "@/lib/run";
 
-import type { AgentData, ToolData, OutputData, TypedNode, Id } from "@/types";
+import type { AgentData, ToolData, OutputData, TypedNode } from "@/types";
 
 export default function App() {
   const [nodes, setNodes] = useState<TypedNode[]>([]);

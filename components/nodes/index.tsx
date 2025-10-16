@@ -1,5 +1,6 @@
 import React from "react";
 import type { NodeProps, NodeTypes } from "@xyflow/react";
+import { Position, Handle } from "@xyflow/react";
 import type { AgentData, ToolData, OutputData } from "@/types";
 
 function NodeChrome({
@@ -15,11 +16,17 @@ function NodeChrome({
 }) {
   return (
     <div className="bg-white/90 backdrop-blur rounded-2xl border shadow-sm min-w-[200px]">
-      <div className={`px-3 py-2 rounded-t-2xl text-xs font-medium ${color} text-white`}>
+      <Handle type="source" position={Position.Top} />
+      <Handle type="target" position={Position.Bottom} />
+      <div
+        className={`px-3 py-2 rounded-t-2xl text-xs font-medium ${color} text-white`}
+      >
         {title}
       </div>
       <div className="p-3 space-y-2">
-        {subtitle && <div className="text-[11px] text-gray-500">{subtitle}</div>}
+        {subtitle && (
+          <div className="text-[11px] text-gray-500">{subtitle}</div>
+        )}
         <div className="text-sm">{children}</div>
       </div>
     </div>
@@ -44,7 +51,11 @@ export const AgentNode: React.FC<NodeProps> = ({ data }) => {
 export const ToolNode: React.FC<NodeProps> = ({ data }) => {
   const d = (data || {}) as ToolData;
   return (
-    <NodeChrome title={d.name || "Tool"} subtitle={d.kind || "HTTP/DB/Code"} color="bg-emerald-500">
+    <NodeChrome
+      title={d.name || "Tool"}
+      subtitle={d.kind || "HTTP/DB/Code"}
+      color="bg-emerald-500"
+    >
       <div className="text-gray-700">
         {d.config?.endpoint ? (
           <div className="text-[11px] break-all">{d.config.endpoint}</div>
@@ -56,11 +67,15 @@ export const ToolNode: React.FC<NodeProps> = ({ data }) => {
   );
 };
 
-export const OutputNode: React.FC<NodeProps> = ({ data }) => {
+export const ResultNode: React.FC<NodeProps> = ({ data }) => {
   const d = (data || {}) as OutputData;
   return (
-    <NodeChrome title={d.name || "Output"} subtitle="Terminal" color="bg-slate-600">
-      <div className="text-[11px] text-gray-700 whitespace-pre-wrap max-h-24 overflow-auto">
+    <NodeChrome
+      title={d.name || "Result"}
+      subtitle="Terminal"
+      color="bg-slate-600"
+    >
+      <div className="text-[11px] text-gray-700 whitespace-pre-wrap max-h-24 overflow-auto ">
         {d.preview || "Will show the final result."}
       </div>
     </NodeChrome>
@@ -70,5 +85,5 @@ export const OutputNode: React.FC<NodeProps> = ({ data }) => {
 export const nodeTypes: NodeTypes = {
   agent: AgentNode,
   tool: ToolNode,
-  output: OutputNode,
+  result: ResultNode,
 };
