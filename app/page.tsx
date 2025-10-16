@@ -20,6 +20,7 @@ export default function App() {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [runnable, setRunnable] = useState(true);
 
   const selected = useMemo(
     () => nodes.find((n) => n.id === selectedId),
@@ -59,7 +60,7 @@ export default function App() {
   };
 
   const run = async () => {
-    await runLib(nodes, edges, setLogs, setNodes);
+    await runLib(nodes, edges, setLogs, setNodes, runnable, setRunnable);
   };
 
   return (
