@@ -1,26 +1,25 @@
-import { useCallback } from "react";
+import React, { useCallback } from "react";
+import type {
+  Connection,
+  Edge,
+  EdgeChange,
+  Node,
+  NodeChange,
+  NodeTypes,
+  OnSelectionChangeParams,
+} from "@xyflow/react";
 import {
+  addEdge,
+  applyEdgeChanges,
+  applyNodeChanges,
   Background,
+  ConnectionMode,
   Controls,
+  MarkerType,
   MiniMap,
   ReactFlow,
-  applyNodeChanges,
-  applyEdgeChanges,
-  addEdge,
   useReactFlow,
-  MarkerType,
 } from "@xyflow/react";
-import type {
-  Node,
-  Edge,
-  NodeChange,
-  EdgeChange,
-  Connection,
-  OnSelectionChangeParams,
-  NodeTypes,
-} from "@xyflow/react";
-
-import React from "react";
 import { nodeTypes } from "@/components/nodes";
 
 function ViewPort({
@@ -103,6 +102,7 @@ function ViewPort({
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        connectionMode={ConnectionMode.Loose}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}

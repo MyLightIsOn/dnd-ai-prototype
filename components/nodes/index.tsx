@@ -16,8 +16,30 @@ function NodeChrome({
 }) {
   return (
     <div className="bg-white/90 backdrop-blur rounded-2xl border shadow-sm min-w-[200px]">
-      <Handle type="source" position={Position.Top} />
-      <Handle type="target" position={Position.Bottom} />
+      <Handle
+        id="right-source"
+        type="source"
+        isConnectable
+        position={Position.Right}
+      />
+      <Handle
+        id="left-source"
+        type="source"
+        isConnectable
+        position={Position.Left}
+      />
+      <Handle
+        id="top-source"
+        type="source"
+        isConnectable
+        position={Position.Top}
+      />
+      <Handle
+        id="bottom-source"
+        type="source"
+        isConnectable
+        position={Position.Bottom}
+      />
       <div
         className={`px-3 py-2 rounded-t-2xl text-xs font-medium ${color} text-white`}
       >
