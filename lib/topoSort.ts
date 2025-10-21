@@ -1,9 +1,9 @@
-import type { Edge, Node } from "@xyflow/react";
-import type { Id } from "@/types";
+import type { Edge } from "@xyflow/react";
+import type { Id, TypedNode } from "@/types";
 
 // Utility: simple topological ordering; detects cycles
 export function topoSort(
-  nodes: Node[],
+  nodes: TypedNode[],
   edges: Edge[],
 ): { order: Id[]; hasCycle: boolean } {
   const inDeg = new Map<Id, number>();
