@@ -1,14 +1,11 @@
-Absolutely. Here’s a **first-draft `README.md`** tailored for your open-source, flowchart-based multi-agent playground. It balances clarity for new users, excitement for contributors, and technical credibility for developers.
-
-It is a work in progress...
-
-<img src="docs/screenshot.png" alt="screenshot" width="640" />
 
 ---
 # 🧠 Multi-Agent Workflow Studio
 
 > A visual playground for designing, running, and sharing multi-agent AI workflows — no backend, no setup, no hassle.
 ---
+
+<img src="docs/screenshot.png" alt="screenshot" width="640" />
 
 ## ✨ Overview
 
