@@ -84,10 +84,10 @@ export default function App() {
           <div className="row-span-2 bg-white border rounded-2xl overflow-hidden">
             <ViewPort
               nodes={nodes as unknown as Node[]}
-              setNodes={setNodes as any}
+              setNodes={setNodes}
               edges={edges}
-              setEdges={setEdges as any}
-              onSelectionChange={onSelectionChange as any}
+              setEdges={setEdges}
+              onSelectionChange={onSelectionChange}
             />
           </div>
 
@@ -98,10 +98,7 @@ export default function App() {
               </div>
               <Settings size={16} />
             </div>
-            <PropertiesPanel
-              selected={selected as any}
-              onChange={updateSelected}
-            />
+            <PropertiesPanel selected={selected} onChange={updateSelected} />
           </div>
 
           <div className="col-span-3">

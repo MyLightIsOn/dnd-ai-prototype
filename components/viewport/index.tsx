@@ -69,7 +69,7 @@ function ViewPort({
       if (!data) return;
       const { type, meta } = JSON.parse(data) as {
         type: "agent" | "tool" | "result";
-        meta?: any;
+        meta?: string | object | null | undefined;
       };
       const position = rf.screenToFlowPosition({
         x: event.clientX - bounds.left,
