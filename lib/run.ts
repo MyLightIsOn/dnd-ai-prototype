@@ -150,13 +150,10 @@ export async function run(
 
       if (mode === 'mock') {
         // Mock mode: simulate agent execution
-        const combinedInput = dependencyOutputs.join("\n");
-        const logText = `🤖 ${agentName} (${modelStr}) [MOCK]\nPrompt: ${agentData.prompt || ""}\nInput: ${combinedInput || "<none>"}\nOutput: ${Math.random()
-          .toString(36)
-          .slice(2, 8)} …`;
+        const mockOutput = `This is a mock response from ${agentName}. In live mode, this would be the actual LLM output based on the prompt: "${agentData.prompt || 'no prompt'}"`;
 
-        nodeOutputs[node.id] = logText;
-        setLogs((logs) => logs.concat(logText));
+        nodeOutputs[node.id] = mockOutput;
+        setLogs((logs) => logs.concat(`🤖 ${agentName} (${modelStr}) [MOCK]\n${mockOutput}`));
       } else {
         // Live mode: call real LLM provider
         if (!agentData.model || !agentData.model.includes('/')) {
@@ -324,11 +321,24 @@ export async function run(
     } else if (node.type === "result") {
       // Final result node gathers the last available upstream output
       const outputData = node.data as OutputData;
-      const dependencyOutputs = incomingEdgesByNode[node.id]
+      const incomingNodes = incomingEdgesByNode[node.id] || [];
+      const dependencyOutputs = incomingNodes
         .map((depId) => nodeOutputs[depId])
         .filter(Boolean);
 
-      const finalText = `📦 Final: ${dependencyOutputs[dependencyOutputs.length - 1] || dependencyOutputs.join("\n") || "<empty>"}`;
+      // Debug logging
+      console.log('Result node debug:', {
+        nodeId: node.id,
+        incomingNodes,
+        dependencyOutputs,
+        nodeOutputsKeys: Object.keys(nodeOutputs)
+      });
+
+      const finalOutput = dependencyOutputs.length > 0
+        ? dependencyOutputs[dependencyOutputs.length - 1]
+        : "<empty>";
+
+      const finalText = `📦 Final: ${finalOutput}`;
 
       nodeOutputs[node.id] = finalText;
       setLogs((logs) => logs.concat(finalText));
