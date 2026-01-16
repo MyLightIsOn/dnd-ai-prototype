@@ -25,9 +25,14 @@ class OpenAIProvider implements ModelProvider {
 
   /**
    * Create an OpenAI client instance with the provided API key.
+   * Note: dangerouslyAllowBrowser is enabled for prototype/demo purposes.
+   * In production, API keys should be handled server-side.
    */
   private createClient(apiKey: string): OpenAI {
-    return new OpenAI({ apiKey });
+    return new OpenAI({
+      apiKey,
+      dangerouslyAllowBrowser: true
+    });
   }
 
   /**

@@ -49,7 +49,10 @@ class AnthropicProvider implements ModelProvider {
    * Request a non-streaming completion from Claude.
    */
   async complete(params: CompletionParams): Promise<CompletionResponse> {
-    const client = new Anthropic({ apiKey: params.apiKey });
+    const client = new Anthropic({
+      apiKey: params.apiKey,
+      dangerouslyAllowBrowser: true
+    });
     const { system, messages } = transformMessages(params.messages);
 
     try {
@@ -87,7 +90,10 @@ class AnthropicProvider implements ModelProvider {
    * Request a streaming completion from Claude.
    */
   async *stream(params: CompletionParams): AsyncIterator<StreamChunk> {
-    const client = new Anthropic({ apiKey: params.apiKey });
+    const client = new Anthropic({
+      apiKey: params.apiKey,
+      dangerouslyAllowBrowser: true
+    });
     const { system, messages } = transformMessages(params.messages);
 
     try {
@@ -139,7 +145,10 @@ class AnthropicProvider implements ModelProvider {
    */
   async validateApiKey(apiKey: string): Promise<boolean> {
     try {
-      const client = new Anthropic({ apiKey });
+      const client = new Anthropic({
+        apiKey,
+        dangerouslyAllowBrowser: true
+      });
 
       // Make a minimal API call to validate the key
       await client.messages.create({
