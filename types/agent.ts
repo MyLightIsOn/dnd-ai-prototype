@@ -7,4 +7,6 @@ export type AgentData = {
   streaming?: boolean; // Default to false
   temperature?: number;
   maxTokens?: number;
+  executionState?: 'idle' | 'executing' | 'completed' | 'error';
+  executionError?: string;
 };

@@ -2,20 +2,30 @@ import React from "react";
 import type { NodeProps, NodeTypes } from "@xyflow/react";
 import { Position, Handle } from "@xyflow/react";
 import type { AgentData, ToolData, OutputData, PromptData } from "@/types";
+import { DocumentNode } from "./document-node";
+import { ChunkerNode } from "./chunker-node";
 
 function NodeChrome({
   title,
   subtitle,
   color = "",
   children,
+  executionState,
 }: {
   title: string | React.ReactNode;
   subtitle?: string;
   color?: string;
   children?: React.ReactNode;
+  executionState?: 'idle' | 'executing' | 'completed' | 'error';
 }) {
+  const borderColor =
+    executionState === 'executing' ? 'border-blue-500 border-2 animate-pulse' :
+    executionState === 'completed' ? 'border-green-500 border-2' :
+    executionState === 'error' ? 'border-red-500 border-2' :
+    'border';
+
   return (
-    <div className="bg-white/90 backdrop-blur rounded-2xl border shadow-sm min-w-[200px]">
+    <div className={`bg-white/90 backdrop-blur rounded-2xl ${borderColor} shadow-sm min-w-[200px]`}>
       <Handle type="source" position={Position.Top} />
       <Handle type="target" position={Position.Bottom} />
       <div
@@ -68,6 +78,7 @@ export const AgentNode: React.FC<NodeProps> = ({ data }) => {
       }
       subtitle={providerInfo.name}
       color="bg-indigo-500"
+      executionState={d.executionState}
     >
       <div className="space-y-1">
         <div className="text-gray-700 font-medium text-sm">
@@ -92,6 +103,7 @@ export const ToolNode: React.FC<NodeProps> = ({ data }) => {
       title={d.name || "Tool"}
       subtitle={d.kind || "HTTP/DB/Code"}
       color="bg-orange-600"
+      executionState={d.executionState}
     >
       <div className="text-gray-700">
         {d.config?.endpoint ? (
@@ -111,6 +123,7 @@ export const ResultNode: React.FC<NodeProps> = ({ data }) => {
       title={d.name || "Result"}
       subtitle="Terminal"
       color="bg-slate-600"
+      executionState={d.executionState}
     >
       <div className="text-[11px] text-gray-700 whitespace-pre-wrap max-h-24 overflow-auto ">
         {d.preview || "Will show the final result."}
@@ -126,6 +139,7 @@ export const PromptNode: React.FC<NodeProps> = ({ data }) => {
       title={d.name || "Prompt"}
       subtitle="Input"
       color="bg-emerald-500"
+      executionState={d.executionState}
     >
       <div className="text-[11px] text-gray-700 whitespace-pre-wrap max-h-24 overflow-auto ">
         {d.text || "Prompt goes here"}
@@ -139,4 +153,6 @@ export const nodeTypes: NodeTypes = {
   tool: ToolNode,
   result: ResultNode,
   prompt: PromptNode,
+  document: DocumentNode,
+  chunker: ChunkerNode,
 };
