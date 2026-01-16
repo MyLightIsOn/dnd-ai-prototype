@@ -321,8 +321,8 @@ export async function run(
       // Output chunks separated by delimiter
       nodeOutputs[node.id] = chunks.join('\n\n---CHUNK---\n\n');
       setLogs(logs => logs.concat(`📑 ${chunkerData.name || 'Chunker'}: Created ${chunks.length} chunks`));
-    } else if (node.type === "output") {
-      // Final output node gathers the last available upstream output
+    } else if (node.type === "result") {
+      // Final result node gathers the last available upstream output
       const outputData = node.data as OutputData;
       const dependencyOutputs = incomingEdgesByNode[node.id]
         .map((depId) => nodeOutputs[depId])
