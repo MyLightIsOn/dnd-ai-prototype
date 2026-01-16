@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
-import type { AgentData, ToolData, OutputData, PromptData } from "@/types";
+import type { AgentData, ToolData, OutputData, PromptData, DocumentData, ChunkerData } from "@/types";
 import type { TypedNode } from "@/types";
 import { getAllModels } from "@/lib/providers";
+import { DocumentProperties } from "./document-properties";
+import { ChunkerProperties } from "./chunker-properties";
 
 function PropertiesPanel({
   selected,
@@ -11,7 +13,7 @@ function PropertiesPanel({
 }: {
   selected: TypedNode | null | undefined;
   onChange: (
-    patch: Partial<AgentData & ToolData & OutputData & PromptData>,
+    patch: Partial<AgentData & ToolData & OutputData & PromptData & DocumentData & ChunkerData>,
   ) => void;
 }) {
   if (!selected)
@@ -85,6 +87,18 @@ function PropertiesPanel({
           />
         </div>
       )}
+      {type === "document" && (
+        <DocumentProperties
+          data={data as DocumentData}
+          onChange={onChange}
+        />
+      )}
+      {type === "chunker" && (
+        <ChunkerProperties
+          data={data as ChunkerData}
+          onChange={onChange}
+        />
+      )}
     </div>
   );
 }
@@ -150,7 +164,7 @@ function AgentProperties({
               name="mode"
               value="mock"
               checked={mode === "mock"}
-              onChange={(e) => onChange({ mode: "mock" })}
+              onChange={() => onChange({ mode: "mock" })}
               className="w-4 h-4 cursor-pointer"
             />
             <span className="text-sm">Mock</span>
@@ -161,7 +175,7 @@ function AgentProperties({
               name="mode"
               value="live"
               checked={mode === "live"}
-              onChange={(e) => onChange({ mode: "live" })}
+              onChange={() => onChange({ mode: "live" })}
               className="w-4 h-4 cursor-pointer"
             />
             <span className="text-sm">Live</span>

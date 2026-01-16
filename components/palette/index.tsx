@@ -29,6 +29,16 @@ function Pallette() {
           config: { endpoint: "https://api.example.com" },
         }}
       />
+      <PaletteItem
+        type="document"
+        label="Document"
+        meta={{ name: "Document" }}
+      />
+      <PaletteItem
+        type="chunker"
+        label="Chunker"
+        meta={{ name: "Chunker", strategy: "fixed", chunkSize: 500, overlap: 50 }}
+      />
       <PaletteItem type="result" label="Result" meta={{ name: "Result" }} />
       <div className="pt-2 text-[11px] text-gray-500">
         Drag items onto the canvas. Connect nodes by dragging from a handle edge
