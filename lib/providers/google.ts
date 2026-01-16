@@ -175,7 +175,7 @@ class GoogleProvider implements ModelProvider {
   async validateApiKey(apiKey: string): Promise<boolean> {
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
       // Make a minimal test call
       await model.generateContent({
