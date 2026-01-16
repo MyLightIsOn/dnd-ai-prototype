@@ -88,6 +88,8 @@ export interface ModelProvider {
 
   /**
    * Calculate the cost in USD for the given token usage.
+   * @param modelId - The model identifier to look up pricing
+   * @param tokens - The token usage to calculate cost for
    */
-  calculateCost(tokens: TokenUsage): number;
+  calculateCost(modelId: string, tokens: TokenUsage): number;
 }
