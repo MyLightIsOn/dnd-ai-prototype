@@ -5,21 +5,25 @@ import ViewPort from "@/components/viewport";
 import Palette from "@/components/palette";
 import PropertiesPanel from "@/components/properties";
 import Console from "@/components/console";
+import SettingsModal from "@/components/settings";
 import { Settings } from "lucide-react";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef } from "react";
 
 import { exportJSON } from "@/lib/exportJSON";
 import { importJSON } from "@/lib/importJSON";
 import { addSample as addSampleLib } from "@/lib/addSample";
-import { run as runLib } from "@/lib/run";
+import { run as runLib, type ExecutionStatus } from "@/lib/run";
 
-import type { AgentData, ToolData, OutputData, TypedNode } from "@/types";
+import type { AgentData, ToolData, OutputData, TypedNode, PromptData, DocumentData, ChunkerData } from "@/types";
 
 export default function App() {
   const [nodes, setNodes] = useState<TypedNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [executionStatus, setExecutionStatus] = useState<ExecutionStatus>('idle');
+  const executionControlRef = useRef<ExecutionStatus>('idle');
 
   const selected = useMemo(
     () => nodes.find((n) => n.id === selectedId),
@@ -27,7 +31,7 @@ export default function App() {
   );
 
   const updateSelected = (
-    patch: Partial<AgentData & ToolData & OutputData>,
+    patch: Partial<AgentData & ToolData & OutputData & PromptData & DocumentData & ChunkerData>,
   ) => {
     if (!selectedId) return;
     setNodes((nds) =>
@@ -59,7 +63,39 @@ export default function App() {
   };
 
   const run = async () => {
-    await runLib(nodes, edges, setLogs, setNodes);
+    // Set execution status to running
+    setExecutionStatus('running');
+    executionControlRef.current = 'running';
+
+    await runLib(nodes, edges, setLogs, setNodes, executionControlRef);
+
+    // Reset to idle after completion (unless already cancelled)
+    const currentStatus = executionControlRef.current;
+    if (currentStatus === 'running' || currentStatus === 'paused') {
+      setExecutionStatus('idle');
+      executionControlRef.current = 'idle';
+    }
+  };
+
+  const pause = () => {
+    setExecutionStatus('paused');
+    executionControlRef.current = 'paused';
+  };
+
+  const resume = () => {
+    setExecutionStatus('running');
+    executionControlRef.current = 'running';
+  };
+
+  const cancel = () => {
+    setExecutionStatus('cancelled');
+    executionControlRef.current = 'cancelled';
+
+    // Reset to idle after a brief moment
+    setTimeout(() => {
+      setExecutionStatus('idle');
+      executionControlRef.current = 'idle';
+    }, 100);
   };
 
   return (
@@ -68,6 +104,10 @@ export default function App() {
         <div className="w-full h-[85vh] grid grid-cols-[260px_1fr_320px] grid-rows-[auto_1fr_auto] gap-4">
           <Header
             onRun={run}
+            onPause={pause}
+            onResume={resume}
+            onCancel={cancel}
+            executionStatus={executionStatus}
             onClear={clearAll}
             onExport={() => {
               exportJSON({ nodes, edges });
@@ -78,6 +118,7 @@ export default function App() {
               );
             }}
             onAddSample={addSample}
+            onSettings={() => setSettingsOpen(true)}
           />
           <Palette />
 
@@ -105,6 +146,11 @@ export default function App() {
             <Console logs={logs} onClear={() => setLogs([])} />
           </div>
         </div>
+
+        <SettingsModal
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+        />
       </ReactFlowProvider>
     </div>
   );

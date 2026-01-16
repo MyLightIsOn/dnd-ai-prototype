@@ -1,11 +1,12 @@
 import React from "react";
 import { topoSort } from "@/lib/topoSort";
 import type { Edge } from "@xyflow/react";
-import type { AgentData, ToolData, OutputData, TypedNode, Id } from "@/types";
+import type { AgentData, ToolData, OutputData, TypedNode, Id, ChunkerData } from "@/types";
 import type { DocumentData } from "@/types/document";
 import { getProvider } from "@/lib/providers";
 import { getApiKey } from "@/lib/storage/api-keys";
 import type { Message } from "@/lib/providers/base";
+import { chunkDocument } from "@/lib/document/chunker";
 
 /**
  * Build the message array for an LLM completion request.
@@ -29,12 +30,22 @@ function buildMessages(agentData: AgentData, inputs: string[]): Message[] {
   return messages;
 }
 
+export type ExecutionStatus = 'idle' | 'running' | 'paused' | 'cancelled';
+
+export interface ExecutionControl {
+  status: ExecutionStatus;
+  pause: () => void;
+  resume: () => void;
+  cancel: () => void;
+}
+
 // Executes the graph by traversing nodes in topological order and producing log output.
 export async function run(
   nodes: TypedNode[],
   edges: Edge[],
   setLogs: React.Dispatch<React.SetStateAction<string[]>>,
   setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>,
+  executionControl?: React.MutableRefObject<ExecutionStatus>,
 ) {
   // Clear previous logs before starting a new run
   setLogs([]);
@@ -75,14 +86,54 @@ export async function run(
 
   // Execute nodes in topological order so dependencies are processed first
   for (const nodeId of topologicalOrder) {
+    // Check for cancellation
+    if (executionControl?.current === 'cancelled') {
+      setLogs((logs) => logs.concat("🛑 Execution cancelled."));
+      // Reset all nodes to idle state
+      setNodes(nodes => nodes.map(n => ({
+        ...n,
+        data: { ...n.data, executionState: 'idle' as const }
+      })));
+      return;
+    }
+
+    // Check for pause
+    if (executionControl?.current === 'paused') {
+      setLogs((logs) => logs.concat("⏸️  Execution paused."));
+
+      // Wait until resumed or cancelled
+      while (executionControl?.current === 'paused') {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      // Check if cancelled while paused
+      if (executionControl?.current === 'cancelled') {
+        setLogs((logs) => logs.concat("🛑 Execution cancelled."));
+        // Reset all nodes to idle state
+        setNodes(nodes => nodes.map(n => ({
+          ...n,
+          data: { ...n.data, executionState: 'idle' as const }
+        })));
+        return;
+      }
+
+      setLogs((logs) => logs.concat("▶️  Execution resumed."));
+    }
+
     const node = nodesById[nodeId];
 
-    if (node.type === "document") {
-      // Document node: store content for downstream agents
-      const docData = node.data as DocumentData;
-      nodeOutputs[node.id] = docData.content || '';
-      setLogs(logs => logs.concat(`📄 ${docData.name || 'Document'}: ${docData.fileName || 'No file'} (${docData.content?.length || 0} chars)`));
-    } else if (node.type === "agent") {
+    // Set node to executing state
+    setNodes(nodes => nodes.map(n =>
+      n.id === nodeId ? { ...n, data: { ...n.data, executionState: 'executing' as const } } : n
+    ));
+
+    try {
+      if (node.type === "document") {
+        // Document node: store content for downstream agents
+        const docData = node.data as DocumentData;
+        nodeOutputs[node.id] = docData.content || '';
+        setLogs(logs => logs.concat(`📄 ${docData.name || 'Document'}: ${docData.fileName || 'No file'} (${docData.content?.length || 0} chars)`));
+      } else if (node.type === "agent") {
       // Gather inputs from dependencies (upstream node outputs)
       const agentData = node.data as AgentData;
       const dependencyOutputs = incomingEdgesByNode[node.id]
@@ -233,6 +284,39 @@ export async function run(
 
       nodeOutputs[node.id] = logText;
       setLogs((logs) => logs.concat(logText));
+    } else if (node.type === "chunker") {
+      // Chunker node: split document content into chunks
+      const chunkerData = node.data as ChunkerData;
+      const dependencyOutputs = incomingEdgesByNode[node.id]
+        .map((depId) => nodeOutputs[depId])
+        .filter(Boolean);
+
+      if (dependencyOutputs.length === 0) {
+        const errorMsg = `❌ ${chunkerData.name || 'Chunker'}: No input document`;
+        setLogs((logs) => logs.concat(errorMsg));
+        throw new Error(errorMsg);
+      }
+
+      const parentContent = dependencyOutputs[0];
+      const chunks = chunkDocument(
+        parentContent,
+        chunkerData.strategy || 'fixed',
+        chunkerData.chunkSize || 500,
+        chunkerData.overlap || 50
+      );
+
+      // Store chunks in node data
+      setNodes((currentNodes) =>
+        currentNodes.map((mapped) =>
+          mapped.id === node.id
+            ? { ...mapped, data: { ...mapped.data, chunks } }
+            : mapped,
+        ),
+      );
+
+      // Output chunks separated by delimiter
+      nodeOutputs[node.id] = chunks.join('\n\n---CHUNK---\n\n');
+      setLogs(logs => logs.concat(`📑 ${chunkerData.name || 'Chunker'}: Created ${chunks.length} chunks`));
     } else if (node.type === "output") {
       // Final output node gathers the last available upstream output
       const outputData = node.data as OutputData;
@@ -253,6 +337,27 @@ export async function run(
             : mapped,
         ),
       );
+    }
+
+      // Mark node as completed
+      setNodes(nodes => nodes.map(n =>
+        n.id === nodeId ? { ...n, data: { ...n.data, executionState: 'completed' as const } } : n
+      ));
+    } catch (error) {
+      // Mark node as error
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setNodes(nodes => nodes.map(n =>
+        n.id === nodeId ? {
+          ...n,
+          data: {
+            ...n.data,
+            executionState: 'error' as const,
+            executionError: errorMessage
+          }
+        } : n
+      ));
+      // Re-throw to stop execution
+      throw error;
     }
 
     // Small delay for visual feedback in the UI
