@@ -2,6 +2,7 @@ import React from "react";
 import { topoSort } from "@/lib/topoSort";
 import type { Edge } from "@xyflow/react";
 import type { AgentData, ToolData, OutputData, TypedNode, Id } from "@/types";
+import type { DocumentData } from "@/types/document";
 import { getProvider } from "@/lib/providers";
 import { getApiKey } from "@/lib/storage/api-keys";
 import type { Message } from "@/lib/providers/base";
@@ -16,7 +17,7 @@ function buildMessages(agentData: AgentData, inputs: string[]): Message[] {
   if (inputs.length > 0) {
     messages.push({
       role: 'user',
-      content: inputs.join('\n\n')
+      content: `Context:\n\n${inputs.join('\n\n---\n\n')}`
     });
   }
 
@@ -76,7 +77,12 @@ export async function run(
   for (const nodeId of topologicalOrder) {
     const node = nodesById[nodeId];
 
-    if (node.type === "agent") {
+    if (node.type === "document") {
+      // Document node: store content for downstream agents
+      const docData = node.data as DocumentData;
+      nodeOutputs[node.id] = docData.content || '';
+      setLogs(logs => logs.concat(`📄 ${docData.name || 'Document'}: ${docData.fileName || 'No file'} (${docData.content?.length || 0} chars)`));
+    } else if (node.type === "agent") {
       // Gather inputs from dependencies (upstream node outputs)
       const agentData = node.data as AgentData;
       const dependencyOutputs = incomingEdgesByNode[node.id]
