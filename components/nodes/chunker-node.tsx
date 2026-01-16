@@ -24,8 +24,15 @@ function NodeChrome({
 
   return (
     <div className={`bg-white/90 backdrop-blur rounded-2xl ${borderColor} shadow-sm min-w-[200px]`}>
-      <Handle type="source" position={Position.Top} />
-      <Handle type="target" position={Position.Bottom} />
+      {/* Add handles on all sides - each can be both source and target for flexibility */}
+      <Handle type="source" position={Position.Top} id="top-source" />
+      <Handle type="target" position={Position.Top} id="top-target" />
+      <Handle type="source" position={Position.Bottom} id="bottom-source" />
+      <Handle type="target" position={Position.Bottom} id="bottom-target" />
+      <Handle type="source" position={Position.Left} id="left-source" />
+      <Handle type="target" position={Position.Left} id="left-target" />
+      <Handle type="source" position={Position.Right} id="right-source" />
+      <Handle type="target" position={Position.Right} id="right-target" />
       <div
         className={`px-3 py-2 rounded-t-2xl text-xs font-medium ${color} text-white`}
       >
