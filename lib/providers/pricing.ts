@@ -79,14 +79,14 @@ export const anthropicModels: ModelConfig[] = [
 export const googleModels: ModelConfig[] = [
   {
     id: "gemini-2.0-flash-exp",
-    displayName: "Gemini 2.0 Flash",
+    displayName: "Gemini 2.0 Flash (Exp)",
     provider: "google",
     contextWindow: 1000000,
     inputPricePerMillion: 0.00,
     outputPricePerMillion: 0.00,
   },
   {
-    id: "gemini-1.5-pro",
+    id: "gemini-1.5-pro-latest",
     displayName: "Gemini 1.5 Pro",
     provider: "google",
     contextWindow: 2000000,
@@ -94,7 +94,7 @@ export const googleModels: ModelConfig[] = [
     outputPricePerMillion: 5.00,
   },
   {
-    id: "gemini-1.5-flash",
+    id: "gemini-1.5-flash-latest",
     displayName: "Gemini 1.5 Flash",
     provider: "google",
     contextWindow: 1000000,
