@@ -9,7 +9,7 @@ function NodeChrome({
   color = "",
   children,
 }: {
-  title: string;
+  title: string | React.ReactNode;
   subtitle?: string;
   color?: string;
   children?: React.ReactNode;
@@ -35,14 +35,51 @@ function NodeChrome({
 
 export const AgentNode: React.FC<NodeProps> = ({ data }) => {
   const d = (data || {}) as AgentData;
+
+  // Parse provider from model string (format: provider/model-id)
+  const modelString = d.model || "openai/gpt-4o-mini";
+  const [provider, modelId] = modelString.split("/");
+
+  // Get provider display info
+  const providerInfo = {
+    openai: { icon: "🟢", name: "OpenAI" },
+    anthropic: { icon: "🟣", name: "Anthropic" },
+    google: { icon: "🔵", name: "Google" },
+    ollama: { icon: "🟠", name: "Ollama" },
+  }[provider] || { icon: "🤖", name: provider };
+
+  // Get mode badge
+  const mode = d.mode || "mock";
+  const modeBadge = mode.toUpperCase();
+  const modeBadgeColor = mode === "live" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700";
+
   return (
     <NodeChrome
-      title={d.name || "Agent"}
-      subtitle={"model"}
+      title={
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <span>{providerInfo.icon}</span>
+            <span>{d.name || "Agent"}</span>
+          </div>
+          <span className={`text-[9px] px-1.5 py-0.5 rounded ${modeBadgeColor} font-semibold`}>
+            {modeBadge}
+          </span>
+        </div>
+      }
+      subtitle={providerInfo.name}
       color="bg-indigo-500"
     >
-      <div className="text-gray-700 line-clamp-3">
-        {d.model || "Model Type"}
+      <div className="space-y-1">
+        <div className="text-gray-700 font-medium text-sm">
+          {modelId || "gpt-4o-mini"}
+        </div>
+        {d.temperature !== undefined || d.streaming ? (
+          <div className="text-[10px] text-gray-500 flex items-center gap-2">
+            {d.temperature !== undefined && <span>temp: {d.temperature.toFixed(1)}</span>}
+            {d.temperature !== undefined && d.streaming && <span>•</span>}
+            {d.streaming && <span>stream</span>}
+          </div>
+        ) : null}
       </div>
     </NodeChrome>
   );
