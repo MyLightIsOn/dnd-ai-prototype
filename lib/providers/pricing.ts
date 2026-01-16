@@ -86,7 +86,7 @@ export const googleModels: ModelConfig[] = [
     outputPricePerMillion: 0.00,
   },
   {
-    id: "gemini-1.5-pro-latest",
+    id: "gemini-1.5-pro",
     displayName: "Gemini 1.5 Pro",
     provider: "google",
     contextWindow: 2000000,
@@ -94,7 +94,7 @@ export const googleModels: ModelConfig[] = [
     outputPricePerMillion: 5.00,
   },
   {
-    id: "gemini-1.5-flash-latest",
+    id: "gemini-1.5-flash",
     displayName: "Gemini 1.5 Flash",
     provider: "google",
     contextWindow: 1000000,
