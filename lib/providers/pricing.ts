@@ -48,24 +48,24 @@ export const openaiModels: ModelConfig[] = [
  */
 export const anthropicModels: ModelConfig[] = [
   {
-    id: "claude-opus-4-20250514",
-    displayName: "Claude Opus 4",
+    id: "claude-3-opus-20240229",
+    displayName: "Claude 3 Opus",
     provider: "anthropic",
     contextWindow: 200000,
     inputPricePerMillion: 15.00,
     outputPricePerMillion: 75.00,
   },
   {
-    id: "claude-sonnet-4-20250514",
-    displayName: "Claude Sonnet 4",
+    id: "claude-3-5-sonnet-20241022",
+    displayName: "Claude 3.5 Sonnet",
     provider: "anthropic",
     contextWindow: 200000,
     inputPricePerMillion: 3.00,
     outputPricePerMillion: 15.00,
   },
   {
-    id: "claude-haiku-4-20250514",
-    displayName: "Claude Haiku 4",
+    id: "claude-3-5-haiku-20241022",
+    displayName: "Claude 3.5 Haiku",
     provider: "anthropic",
     contextWindow: 200000,
     inputPricePerMillion: 0.80,
