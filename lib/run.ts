@@ -46,6 +46,8 @@ export async function run(
   setLogs: React.Dispatch<React.SetStateAction<string[]>>,
   setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>,
   executionControl?: React.MutableRefObject<ExecutionStatus>,
+  errorRecoveryAction?: React.MutableRefObject<'retry' | 'skip' | 'abort' | null>,
+  setCurrentError?: React.Dispatch<React.SetStateAction<{ nodeId: string; nodeName: string; message: string } | null>>,
 ) {
   // Clear previous logs before starting a new run
   setLogs([]);
@@ -85,7 +87,9 @@ export async function run(
   const STEP_DELAY_MS = 200;
 
   // Execute nodes in topological order so dependencies are processed first
-  for (const nodeId of topologicalOrder) {
+  let nodeIndex = 0;
+  while (nodeIndex < topologicalOrder.length) {
+    const nodeId = topologicalOrder[nodeIndex];
     // Check for cancellation
     if (executionControl?.current === 'cancelled') {
       setLogs((logs) => logs.concat("🛑 Execution cancelled."));
@@ -343,6 +347,9 @@ export async function run(
       setNodes(nodes => nodes.map(n =>
         n.id === nodeId ? { ...n, data: { ...n.data, executionState: 'completed' as const } } : n
       ));
+
+      // Move to next node on success
+      nodeIndex++;
     } catch (error) {
       // Mark node as error
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -356,8 +363,56 @@ export async function run(
           }
         } : n
       ));
-      // Re-throw to stop execution
-      throw error;
+
+      // If error recovery is enabled, show error dialog and wait for user decision
+      if (setCurrentError && errorRecoveryAction) {
+        const node = nodesById[nodeId];
+        const nodeData = node.data as { name?: string };
+        const nodeName = nodeData.name || node.type || 'Unknown Node';
+
+        // Show error dialog
+        setCurrentError({
+          nodeId,
+          nodeName,
+          message: errorMessage
+        });
+
+        // Wait for user to make a decision
+        while (errorRecoveryAction.current === null) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+
+        const action = errorRecoveryAction.current;
+        errorRecoveryAction.current = null;
+
+        if (action === 'retry') {
+          // Retry the same node - reset error state and don't increment index
+          setLogs((logs) => logs.concat(`🔄 Retrying node: ${nodeName}`));
+          setNodes(nodes => nodes.map(n =>
+            n.id === nodeId ? {
+              ...n,
+              data: {
+                ...n.data,
+                executionState: 'idle' as const,
+                executionError: undefined
+              }
+            } : n
+          ));
+          // Don't increment nodeIndex - will retry same node
+          continue;
+        } else if (action === 'skip') {
+          // Skip this node and continue with the rest
+          setLogs((logs) => logs.concat(`⏭️  Skipping node: ${nodeName}`));
+          nodeIndex++;
+          continue;
+        } else if (action === 'abort') {
+          // Abort was already handled by cancel() function
+          return;
+        }
+      } else {
+        // No error recovery available, stop execution
+        throw error;
+      }
     }
 
     // Small delay for visual feedback in the UI

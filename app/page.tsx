@@ -6,6 +6,7 @@ import Palette from "@/components/palette";
 import PropertiesPanel from "@/components/properties";
 import Console from "@/components/console";
 import SettingsModal from "@/components/settings";
+import { ErrorDialog } from "@/components/error-dialog";
 import { Settings } from "lucide-react";
 import React, { useMemo, useState, useRef } from "react";
 
@@ -24,6 +25,12 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [executionStatus, setExecutionStatus] = useState<ExecutionStatus>('idle');
   const executionControlRef = useRef<ExecutionStatus>('idle');
+  const [currentError, setCurrentError] = useState<{
+    nodeId: string;
+    nodeName: string;
+    message: string;
+  } | null>(null);
+  const errorRecoveryActionRef = useRef<'retry' | 'skip' | 'abort' | null>(null);
 
   const selected = useMemo(
     () => nodes.find((n) => n.id === selectedId),
@@ -66,8 +73,9 @@ export default function App() {
     // Set execution status to running
     setExecutionStatus('running');
     executionControlRef.current = 'running';
+    errorRecoveryActionRef.current = null;
 
-    await runLib(nodes, edges, setLogs, setNodes, executionControlRef);
+    await runLib(nodes, edges, setLogs, setNodes, executionControlRef, errorRecoveryActionRef, setCurrentError);
 
     // Reset to idle after completion (unless already cancelled)
     const currentStatus = executionControlRef.current;
@@ -96,6 +104,25 @@ export default function App() {
       setExecutionStatus('idle');
       executionControlRef.current = 'idle';
     }, 100);
+  };
+
+  const handleErrorRetry = () => {
+    console.log('Error recovery: Retry selected');
+    errorRecoveryActionRef.current = 'retry';
+    setCurrentError(null);
+  };
+
+  const handleErrorSkip = () => {
+    console.log('Error recovery: Skip selected');
+    errorRecoveryActionRef.current = 'skip';
+    setCurrentError(null);
+  };
+
+  const handleErrorAbort = () => {
+    console.log('Error recovery: Abort selected');
+    errorRecoveryActionRef.current = 'abort';
+    setCurrentError(null);
+    cancel();
   };
 
   return (
@@ -150,6 +177,16 @@ export default function App() {
         <SettingsModal
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
+        />
+
+        <ErrorDialog
+          open={currentError !== null}
+          onOpenChange={(open) => !open && setCurrentError(null)}
+          nodeName={currentError?.nodeName || ''}
+          errorMessage={currentError?.message || ''}
+          onRetry={handleErrorRetry}
+          onSkip={handleErrorSkip}
+          onAbort={handleErrorAbort}
         />
       </ReactFlowProvider>
     </div>
