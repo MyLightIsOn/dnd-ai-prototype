@@ -22,7 +22,7 @@ function Header({
   onClear: () => void;
   onExport: () => void;
   onImport: React.ChangeEventHandler<HTMLInputElement>;
-  onAddSample: () => void;
+  onAddSample: (sampleType: 'summarizer' | 'rag' | 'multi-agent') => void;
   onSettings: () => void;
 }) {
   return (

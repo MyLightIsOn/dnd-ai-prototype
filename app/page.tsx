@@ -12,7 +12,7 @@ import React, { useMemo, useState, useRef } from "react";
 
 import { exportJSON } from "@/lib/exportJSON";
 import { importJSON } from "@/lib/importJSON";
-import { addSample as addSampleLib } from "@/lib/addSample";
+import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis } from "@/lib/addSample";
 import { run as runLib, type ExecutionStatus } from "@/lib/run";
 
 import type { AgentData, ToolData, OutputData, TypedNode, PromptData, DocumentData, ChunkerData } from "@/types";
@@ -65,8 +65,18 @@ export default function App() {
     setSelectedId(null);
   };
 
-  const addSample = () => {
-    addSampleLib(setNodes, setEdges);
+  const addSample = (sampleType: 'summarizer' | 'rag' | 'multi-agent') => {
+    switch (sampleType) {
+      case 'summarizer':
+        addDocumentSummarizer(setNodes, setEdges);
+        break;
+      case 'rag':
+        addRAGPipeline(setNodes, setEdges);
+        break;
+      case 'multi-agent':
+        addMultiAgentAnalysis(setNodes, setEdges);
+        break;
+    }
   };
 
   const run = async () => {
