@@ -1,16 +1,14 @@
-import type { Edge, Node } from "@xyflow/react";
+import type { Edge } from "@xyflow/react";
 import { MarkerType } from "@xyflow/react";
 import React from "react";
 import type { TypedNode } from "@/types";
 
 export async function importJSON({
   e,
-  nodes,
   setNodes,
   setEdges,
 }: {
   e: React.ChangeEvent<HTMLInputElement>;
-  nodes?: Node[];
   setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>;
   setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
 }) {

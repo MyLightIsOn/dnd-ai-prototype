@@ -91,7 +91,7 @@ function NodeChrome({
 }
 
 export const ChunkerNode: React.FC<NodeProps> = ({ data }) => {
-  const d = (data || {}) as ChunkerData;
+  const d = data as unknown as ChunkerData;
   const chunkCount = d.chunks?.length || 0;
 
   return (
