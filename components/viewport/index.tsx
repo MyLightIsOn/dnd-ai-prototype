@@ -22,6 +22,7 @@ import type {
 
 import React from "react";
 import { nodeTypes } from "@/components/nodes";
+import type { TypedNode } from "@/types";
 
 function ViewPort({
   nodes,
@@ -30,8 +31,8 @@ function ViewPort({
   setEdges,
   onSelectionChange,
 }: {
-  nodes: Node[];
-  setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
+  nodes: TypedNode[];
+  setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>;
   edges: Edge[];
   setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
   onSelectionChange?: (params: OnSelectionChangeParams) => void;
@@ -40,7 +41,9 @@ function ViewPort({
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) =>
-      setNodes((nodesSnapshot) => applyNodeChanges(changes, nodesSnapshot)),
+      setNodes((nodesSnapshot) =>
+        applyNodeChanges(changes, nodesSnapshot as Node[]) as TypedNode[]
+      ),
     [setNodes],
   );
   const onEdgesChange = useCallback(
@@ -101,7 +104,7 @@ function ViewPort({
   return (
     <div className={"w-full h-full"}>
       <ReactFlow
-        nodes={nodes}
+        nodes={nodes as Node[]}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}

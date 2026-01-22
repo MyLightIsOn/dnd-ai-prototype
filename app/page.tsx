@@ -1,5 +1,5 @@
 "use client";
-import { ReactFlowProvider, type Edge, type Node } from "@xyflow/react";
+import { ReactFlowProvider, type Edge } from "@xyflow/react";
 import Header from "@/components/header";
 import ViewPort from "@/components/viewport";
 import Palette from "@/components/palette";
@@ -150,7 +150,7 @@ export default function App() {
               exportJSON({ nodes, edges });
             }}
             onImport={(e) => {
-              importJSON({ e, nodes, setNodes, setEdges }).then((r) =>
+              importJSON({ e, setNodes, setEdges }).then((r) =>
                 console.log(r),
               );
             }}
@@ -161,7 +161,7 @@ export default function App() {
 
           <div className="row-span-2 bg-white border rounded-2xl overflow-hidden">
             <ViewPort
-              nodes={nodes as unknown as Node[]}
+              nodes={nodes}
               setNodes={setNodes}
               edges={edges}
               setEdges={setEdges}

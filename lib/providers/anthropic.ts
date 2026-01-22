@@ -162,7 +162,7 @@ class AnthropicProvider implements ModelProvider {
       // Invalid API key or authentication error
       if (
         error instanceof Anthropic.AuthenticationError ||
-        (error as any)?.status === 401
+        (error instanceof Error && 'status' in error && (error as { status: number }).status === 401)
       ) {
         return false;
       }

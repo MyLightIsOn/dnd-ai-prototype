@@ -62,7 +62,7 @@ class OpenAIProvider implements ModelProvider {
         usage,
         model: response.model,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.handleError(error);
     }
   }
@@ -110,7 +110,7 @@ class OpenAIProvider implements ModelProvider {
         done: true,
         usage: totalUsage,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.handleError(error);
     }
   }
@@ -126,9 +126,9 @@ class OpenAIProvider implements ModelProvider {
       // Make a minimal call to list models
       await client.models.list();
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 401 indicates invalid API key
-      if (error.status === 401) {
+      if (error instanceof Error && 'status' in error && (error as { status: number }).status === 401) {
         return false;
       }
       // Other errors might be network issues, so we'll return false
@@ -159,32 +159,36 @@ class OpenAIProvider implements ModelProvider {
   /**
    * Handle errors from the OpenAI API and throw descriptive errors.
    */
-  private handleError(error: any): never {
-    if (error.status === 401) {
-      throw new Error(
-        "Invalid OpenAI API key. Please check your API key and try again."
-      );
-    }
+  private handleError(error: unknown): never {
+    if (error instanceof Error && 'status' in error) {
+      const statusError = error as { status: number; message?: string; headers?: Record<string, string>; code?: string };
 
-    if (error.status === 429) {
-      const retryAfter = error.headers?.["retry-after"];
-      const message = retryAfter
-        ? `Rate limit exceeded. Retry after ${retryAfter} seconds.`
-        : "Rate limit exceeded. Please try again later.";
-      throw new Error(message);
-    }
+      if (statusError.status === 401) {
+        throw new Error(
+          "Invalid OpenAI API key. Please check your API key and try again."
+        );
+      }
 
-    if (error.status === 500 || error.status >= 500) {
-      throw new Error(
-        `OpenAI service error (${error.status}): ${error.message || "Unknown error"}`
-      );
-    }
+      if (statusError.status === 429) {
+        const retryAfter = statusError.headers?.["retry-after"];
+        const message = retryAfter
+          ? `Rate limit exceeded. Retry after ${retryAfter} seconds.`
+          : "Rate limit exceeded. Please try again later.";
+        throw new Error(message);
+      }
 
-    // Network or timeout errors
-    if (error.code === "ECONNREFUSED" || error.code === "ETIMEDOUT") {
-      throw new Error(
-        `Network error: Unable to connect to OpenAI API. Please check your internet connection.`
-      );
+      if (statusError.status === 500 || statusError.status >= 500) {
+        throw new Error(
+          `OpenAI service error (${statusError.status}): ${statusError.message || "Unknown error"}`
+        );
+      }
+
+      // Network or timeout errors
+      if (statusError.code === "ECONNREFUSED" || statusError.code === "ETIMEDOUT") {
+        throw new Error(
+          `Network error: Unable to connect to OpenAI API. Please check your internet connection.`
+        );
+      }
     }
 
     // Re-throw the original error if we don't have specific handling

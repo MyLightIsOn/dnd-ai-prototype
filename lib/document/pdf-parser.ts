@@ -1,17 +1,18 @@
-import * as pdfjsLib from 'pdfjs-dist';
-
-// Configure PDF.js worker for browser environment
-// Use unpkg CDN with HTTPS
-if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-}
-
 /**
  * Extract text content from a PDF file using PDF.js
  * @param file The PDF file to extract text from
  * @returns The extracted text content
  */
 export async function extractTextFromPDF(file: File): Promise<string> {
+  // Dynamic import to avoid SSR issues
+  const pdfjsLib = await import('pdfjs-dist');
+
+  // Configure PDF.js worker for browser environment
+  // Use unpkg CDN with HTTPS
+  if (typeof window !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+  }
+
   try {
     const arrayBuffer = await file.arrayBuffer();
 
@@ -28,7 +29,12 @@ export async function extractTextFromPDF(file: File): Promise<string> {
 
       // Concatenate text items from the page
       const pageText = textContent.items
-        .map((item: any) => item.str)
+        .map((item) => {
+          if ('str' in item) {
+            return item.str;
+          }
+          return '';
+        })
         .join(' ');
 
       textParts.push(pageText);

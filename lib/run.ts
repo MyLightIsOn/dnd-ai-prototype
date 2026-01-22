@@ -1,7 +1,7 @@
 import React from "react";
 import { topoSort } from "@/lib/topoSort";
 import type { Edge } from "@xyflow/react";
-import type { AgentData, ToolData, OutputData, TypedNode, Id, ChunkerData } from "@/types";
+import type { AgentData, ToolData, TypedNode, Id, ChunkerData } from "@/types";
 import type { DocumentData } from "@/types/document";
 import { getProvider } from "@/lib/providers";
 import { getApiKey } from "@/lib/storage/api-keys";
@@ -320,7 +320,6 @@ export async function run(
       setLogs(logs => logs.concat(`📑 ${chunkerData.name || 'Chunker'}: Created ${chunks.length} chunks`));
     } else if (node.type === "result") {
       // Final result node gathers the last available upstream output
-      const outputData = node.data as OutputData;
       const incomingNodes = incomingEdgesByNode[node.id] || [];
       const dependencyOutputs = incomingNodes
         .map((depId) => nodeOutputs[depId])

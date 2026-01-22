@@ -11,7 +11,6 @@ import type {
   CompletionResponse,
   StreamChunk,
   TokenUsage,
-  Message,
 } from "./base";
 import { registerProvider } from "./registry";
 
@@ -36,23 +35,6 @@ interface OllamaTagsResponse {
       quantization_level?: string;
     };
   }>;
-}
-
-/**
- * Response from Ollama's /api/generate endpoint
- */
-interface OllamaGenerateResponse {
-  model: string;
-  created_at: string;
-  response: string;
-  done: boolean;
-  context?: number[];
-  total_duration?: number;
-  load_duration?: number;
-  prompt_eval_count?: number;
-  prompt_eval_duration?: number;
-  eval_count?: number;
-  eval_duration?: number;
 }
 
 /**
@@ -329,7 +311,7 @@ export class OllamaProvider implements ModelProvider {
   /**
    * Validate API key (Ollama doesn't require one, so check if service is running).
    */
-  async validateApiKey(apiKey: string): Promise<boolean> {
+  async validateApiKey(_apiKey: string): Promise<boolean> {
     // Ollama doesn't use API keys
     // Instead, check if the service is reachable
     try {
@@ -346,7 +328,7 @@ export class OllamaProvider implements ModelProvider {
   /**
    * Calculate cost (always $0 for local Ollama models).
    */
-  calculateCost(modelId: string, tokens: TokenUsage): number {
+  calculateCost(_modelId: string, _tokens: TokenUsage): number {
     return 0.0;
   }
 }
