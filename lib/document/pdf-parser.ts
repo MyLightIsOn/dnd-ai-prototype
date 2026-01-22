@@ -1,16 +1,43 @@
-import { PDFParse } from 'pdf-parse';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Configure PDF.js worker for browser environment
+if (typeof window !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+}
 
 /**
- * Extract text content from a PDF file
+ * Extract text content from a PDF file using PDF.js
  * @param file The PDF file to extract text from
  * @returns The extracted text content
  */
 export async function extractTextFromPDF(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  const parser = new PDFParse({ data: buffer });
-  const result = await parser.getText();
-  return result.text;
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+
+    // Load the PDF document
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    const pdf = await loadingTask.promise;
+
+    const textParts: string[] = [];
+
+    // Extract text from each page
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+
+      // Concatenate text items from the page
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ');
+
+      textParts.push(pageText);
+    }
+
+    return textParts.join('\n\n');
+  } catch (error) {
+    console.error('PDF parsing error:', error);
+    throw new Error(`Failed to parse PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 /**
