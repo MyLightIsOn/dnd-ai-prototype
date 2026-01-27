@@ -1,6 +1,6 @@
 import React from "react";
 import Toolbar from "./toolbar";
-import type { ExecutionStatus } from "@/lib/run";
+import type { ExecutionStatus } from "@/lib/execution/parallel-runner";
 
 function Header({
   onRun,
