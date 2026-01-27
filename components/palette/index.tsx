@@ -39,6 +39,21 @@ function Pallette() {
         label="Chunker"
         meta={{ name: "Chunker", strategy: "fixed", chunkSize: 500, overlap: 50 }}
       />
+      <PaletteItem
+        type="router"
+        label="Router"
+        meta={{
+          name: "Router",
+          strategy: "keyword",
+          routes: [
+            {
+              id: crypto.randomUUID(),
+              label: "Route A",
+              condition: { type: "keyword", keywords: ["example"], matchMode: "any", caseSensitive: false }
+            }
+          ]
+        }}
+      />
       <PaletteItem type="result" label="Result" meta={{ name: "Result" }} />
 
       <div className="pt-2 text-[11px] text-gray-500">

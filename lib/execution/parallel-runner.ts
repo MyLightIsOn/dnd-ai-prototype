@@ -1,0 +1,456 @@
+import React from "react";
+import { topoSort } from "@/lib/topoSort";
+import type { Edge } from "@xyflow/react";
+import type { AgentData, ToolData, TypedNode, Id, ChunkerData, RouterData } from "@/types";
+import type { DocumentData } from "@/types/document";
+import { getProvider } from "@/lib/providers";
+import { getApiKey } from "@/lib/storage/api-keys";
+import type { Message } from "@/lib/providers/base";
+import { chunkDocument } from "@/lib/document/chunker";
+import { groupNodesByLevel } from "./levels";
+import { evaluateRoutes } from "./route-evaluator";
+
+/**
+ * Build the message array for an LLM completion request.
+ */
+function buildMessages(agentData: AgentData, inputs: string[]): Message[] {
+  const messages: Message[] = [];
+
+  if (inputs.length > 0) {
+    messages.push({
+      role: 'user',
+      content: `Context:\n\n${inputs.join('\n\n---\n\n')}`
+    });
+  }
+
+  messages.push({
+    role: 'user',
+    content: agentData.prompt
+  });
+
+  return messages;
+}
+
+export type ExecutionStatus = 'idle' | 'running' | 'paused' | 'cancelled';
+
+interface NodeExecutionContext {
+  nodesById: Record<Id, TypedNode>;
+  incomingEdgesByNode: Record<Id, Id[]>;
+  nodeOutputs: Record<Id, string>;
+  setLogs: React.Dispatch<React.SetStateAction<string[]>>;
+  setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>;
+  executionControl?: React.MutableRefObject<ExecutionStatus>;
+}
+
+/**
+ * Execute a single node and return its output
+ * Throws an error if execution fails
+ */
+async function executeNode(
+  nodeId: Id,
+  context: NodeExecutionContext
+): Promise<string> {
+  const { nodesById, incomingEdgesByNode, nodeOutputs, setLogs, setNodes } = context;
+  const node = nodesById[nodeId];
+
+  // Set node to executing state
+  setNodes(nodes => nodes.map(n =>
+    n.id === nodeId ? { ...n, data: { ...n.data, executionState: 'executing' as const } } : n
+  ));
+
+  let output = '';
+
+  try {
+    if (node.type === "document") {
+      // Document node: store content for downstream agents
+      const docData = node.data as DocumentData;
+      output = docData.content || '';
+      setLogs(logs => logs.concat(`📄 ${docData.name || 'Document'}: ${docData.fileName || 'No file'} (${docData.content?.length || 0} chars)`));
+    } else if (node.type === "agent") {
+      // Gather inputs from dependencies
+      const agentData = node.data as AgentData;
+      const dependencyOutputs = incomingEdgesByNode[node.id]
+        .map((depId) => nodeOutputs[depId])
+        .filter(Boolean);
+
+      const mode = agentData.mode || 'mock';
+      const agentName = agentData.name || "Agent";
+      const modelStr = agentData.model || "model";
+
+      if (mode === 'mock') {
+        // Mock mode
+        output = `This is a mock response from ${agentName}. In live mode, this would be the actual LLM output based on the prompt: "${agentData.prompt || 'no prompt'}"`;
+        setLogs((logs) => logs.concat(`🤖 ${agentName} (${modelStr}) [MOCK]\n${output}`));
+      } else {
+        // Live mode: call real LLM provider
+        if (!agentData.model || !agentData.model.includes('/')) {
+          throw new Error(`Invalid model format. Expected "provider/model-id"`);
+        }
+
+        const [providerName, modelId] = agentData.model.split('/', 2);
+        const provider = getProvider(providerName);
+
+        if (!provider) {
+          throw new Error(`Provider "${providerName}" not found`);
+        }
+
+        const apiKey = getApiKey(providerName);
+        if (!apiKey) {
+          throw new Error(`No API key found for provider "${providerName}"`);
+        }
+
+        const messages = buildMessages(agentData, dependencyOutputs);
+        const streaming = agentData.streaming || false;
+
+        if (streaming && provider.supportsStreaming) {
+          // Streaming mode
+          let accumulatedOutput = '';
+          let logIndex = -1;
+
+          // Add initial log entry
+          setLogs((logs) => {
+            logIndex = logs.length;
+            return logs.concat(`🤖 ${agentName} (${modelStr})\n⏳ Streaming...`);
+          });
+
+          const streamIterator = provider.stream({
+            model: modelId,
+            messages,
+            temperature: agentData.temperature,
+            maxTokens: agentData.maxTokens,
+            apiKey
+          });
+
+          const stream = {
+            [Symbol.asyncIterator]() {
+              return streamIterator;
+            }
+          };
+
+          for await (const chunk of stream) {
+            accumulatedOutput += chunk.delta;
+
+            setLogs((logs) => {
+              const updated = [...logs];
+              updated[logIndex] = `🤖 ${agentName} (${modelStr})\n${accumulatedOutput}${chunk.done ? '' : '▌'}`;
+              return updated;
+            });
+
+            if (chunk.done && chunk.usage) {
+              const cost = provider.calculateCost(modelId, chunk.usage);
+              setLogs((logs) => {
+                const updated = [...logs];
+                updated[logIndex] = `🤖 ${agentName} (${modelStr})\n${accumulatedOutput}\n💰 Cost: $${cost.toFixed(6)} | Tokens: ${chunk.usage!.totalTokens}`;
+                return updated;
+              });
+            }
+          }
+
+          output = accumulatedOutput;
+        } else {
+          // Non-streaming mode
+          setLogs((logs) => logs.concat(`🤖 ${agentName} (${modelStr})\n⏳ Waiting for response...`));
+
+          const response = await provider.complete({
+            model: modelId,
+            messages,
+            temperature: agentData.temperature,
+            maxTokens: agentData.maxTokens,
+            apiKey
+          });
+
+          const cost = provider.calculateCost(modelId, response.usage);
+          const logText = `🤖 ${agentName} (${modelStr})\n${response.content}\n💰 Cost: $${cost.toFixed(6)} | Tokens: ${response.usage.totalTokens}`;
+
+          output = response.content;
+          setLogs((logs) => {
+            const updated = [...logs];
+            updated[updated.length - 1] = logText;
+            return updated;
+          });
+        }
+      }
+    } else if (node.type === "tool") {
+      // Tool execution
+      const toolData = node.data as ToolData;
+      const dependencyOutputs = incomingEdgesByNode[node.id]
+        .map((depId) => nodeOutputs[depId])
+        .filter(Boolean);
+      const endpoint = toolData?.config?.endpoint || "(no endpoint)";
+
+      const logText = `🔧 ${toolData.name || "Tool"} [${toolData.kind || "tool"}]\nGET ${endpoint}\nBody: ${dependencyOutputs
+        .join("\n")
+        .slice(0, 120)}`;
+
+      output = logText;
+      setLogs((logs) => logs.concat(logText));
+    } else if (node.type === "chunker") {
+      // Chunker node
+      const chunkerData = node.data as ChunkerData;
+      const dependencyOutputs = incomingEdgesByNode[node.id]
+        .map((depId) => nodeOutputs[depId])
+        .filter(Boolean);
+
+      if (dependencyOutputs.length === 0) {
+        throw new Error('No input document');
+      }
+
+      const parentContent = dependencyOutputs[0];
+      const chunks = chunkDocument(
+        parentContent,
+        chunkerData.strategy || 'fixed',
+        chunkerData.chunkSize || 500,
+        chunkerData.overlap || 50
+      );
+
+      // Store chunks in node data
+      setNodes((currentNodes) =>
+        currentNodes.map((mapped) =>
+          mapped.id === node.id
+            ? { ...mapped, data: { ...mapped.data, chunks } }
+            : mapped,
+        ),
+      );
+
+      output = chunks.join('\n\n---CHUNK---\n\n');
+      setLogs(logs => logs.concat(`📑 ${chunkerData.name || 'Chunker'}: Created ${chunks.length} chunks`));
+    } else if (node.type === "router") {
+      // Router node - evaluate routes and select path
+      const routerData = node.data as RouterData;
+      const dependencyOutputs = incomingEdgesByNode[node.id]
+        .map((depId) => nodeOutputs[depId])
+        .filter(Boolean);
+
+      if (dependencyOutputs.length === 0) {
+        throw new Error('No input to router');
+      }
+
+      const input = dependencyOutputs.join('\n\n');
+
+      // Evaluate routes
+      const selectedRouteId = await evaluateRoutes(input, routerData);
+
+      // Store selected route
+      setNodes((currentNodes) =>
+        currentNodes.map((mapped) =>
+          mapped.id === node.id
+            ? { ...mapped, data: { ...mapped.data, executedRoute: selectedRouteId || routerData.defaultRoute } }
+            : mapped,
+        ),
+      );
+
+      const selectedRoute = routerData.routes?.find(r => r.id === selectedRouteId);
+      if (selectedRoute) {
+        setLogs(logs => logs.concat(`🔀 ${routerData.name || 'Router'}: Routed to "${selectedRoute.label}"`));
+        output = input; // Pass through input to selected route
+      } else if (routerData.defaultRoute) {
+        setLogs(logs => logs.concat(`🔀 ${routerData.name || 'Router'}: Using default route (no matches)`));
+        output = input;
+      } else {
+        throw new Error('No matching route and no default route configured');
+      }
+    } else if (node.type === "result") {
+      // Result node
+      const incomingNodes = incomingEdgesByNode[node.id] || [];
+      const dependencyOutputs = incomingNodes
+        .map((depId) => nodeOutputs[depId])
+        .filter(Boolean);
+
+      const finalOutput = dependencyOutputs.length > 0
+        ? dependencyOutputs[dependencyOutputs.length - 1]
+        : "<empty>";
+
+      const finalText = `📦 Final: ${finalOutput}`;
+      output = finalText;
+      setLogs((logs) => logs.concat(finalText));
+
+      // Update preview
+      setNodes((currentNodes) =>
+        currentNodes.map((mapped) =>
+          mapped.id === node.id
+            ? { ...mapped, data: { ...mapped.data, preview: finalText.slice(0, 140) } }
+            : mapped,
+        ),
+      );
+    }
+
+    // Mark node as completed
+    setNodes(nodes => nodes.map(n =>
+      n.id === nodeId ? { ...n, data: { ...n.data, executionState: 'completed' as const } } : n
+    ));
+
+    return output;
+  } catch (error) {
+    // Mark node as error
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    setNodes(nodes => nodes.map(n =>
+      n.id === nodeId ? {
+        ...n,
+        data: {
+          ...n.data,
+          executionState: 'error' as const,
+          executionError: errorMessage
+        }
+      } : n
+    ));
+
+    throw error;
+  }
+}
+
+/**
+ * Executes the graph using level-based parallel execution.
+ * Nodes within the same level (no dependencies on each other) run in parallel.
+ * Levels execute sequentially.
+ */
+export async function runParallel(
+  nodes: TypedNode[],
+  edges: Edge[],
+  setLogs: React.Dispatch<React.SetStateAction<string[]>>,
+  setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>,
+  executionControl?: React.MutableRefObject<ExecutionStatus>,
+  errorRecoveryAction?: React.MutableRefObject<'retry' | 'skip' | 'abort' | null>,
+  setCurrentError?: React.Dispatch<React.SetStateAction<{ nodeId: string; nodeName: string; message: string } | null>>,
+) {
+  // Clear previous logs
+  setLogs([]);
+
+  // Compute topological ordering and check for cycles
+  const { order: topologicalOrder, hasCycle } = topoSort(nodes, edges);
+  if (hasCycle) {
+    setLogs((logs) => logs.concat("❌ Graph has a cycle. Break loops to run."));
+    return;
+  }
+
+  // Build lookup maps
+  const nodesById: Record<Id, TypedNode> = nodes.reduce(
+    (acc, node) => {
+      acc[node.id] = node;
+      return acc;
+    },
+    {} as Record<Id, TypedNode>,
+  );
+
+  const incomingEdgesByNode: Record<Id, Id[]> = nodes.reduce(
+    (acc, node) => {
+      acc[node.id] = [] as Id[];
+      return acc;
+    },
+    {} as Record<Id, Id[]>,
+  );
+
+  edges.forEach((edge) => incomingEdgesByNode[edge.target as Id].push(edge.source as Id));
+
+  const nodeOutputs: Record<Id, string> = {};
+
+  // Group nodes by dependency level
+  const levels = groupNodesByLevel(topologicalOrder, edges);
+
+  setLogs((logs) => logs.concat(`🚀 Executing ${levels.length} level(s) with parallel nodes...`));
+
+  const STEP_DELAY_MS = 200;
+
+  // Execute each level sequentially
+  for (let levelIndex = 0; levelIndex < levels.length; levelIndex++) {
+    const level = levels[levelIndex];
+
+    // Check for cancellation
+    if (executionControl?.current === 'cancelled') {
+      setLogs((logs) => logs.concat("🛑 Execution cancelled."));
+      setNodes(nodes => nodes.map(n => ({
+        ...n,
+        data: { ...n.data, executionState: 'idle' as const }
+      })));
+      return;
+    }
+
+    // Check for pause
+    if (executionControl?.current === 'paused') {
+      setLogs((logs) => logs.concat("⏸️  Execution paused."));
+
+      while (executionControl?.current === 'paused') {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      if (executionControl?.current === 'cancelled') {
+        setLogs((logs) => logs.concat("🛑 Execution cancelled."));
+        setNodes(nodes => nodes.map(n => ({
+          ...n,
+          data: { ...n.data, executionState: 'idle' as const }
+        })));
+        return;
+      }
+
+      setLogs((logs) => logs.concat("▶️  Execution resumed."));
+    }
+
+    if (level.length > 1) {
+      setLogs((logs) => logs.concat(`⚡ Level ${levelIndex + 1}: Executing ${level.length} nodes in parallel...`));
+    }
+
+    const context: NodeExecutionContext = {
+      nodesById,
+      incomingEdgesByNode,
+      nodeOutputs,
+      setLogs,
+      setNodes,
+      executionControl
+    };
+
+    // Execute all nodes in this level in parallel
+    const results = await Promise.allSettled(
+      level.map(nodeId => executeNode(nodeId, context))
+    );
+
+    // Process results and handle errors
+    for (let i = 0; i < level.length; i++) {
+      const nodeId = level[i];
+      const result = results[i];
+
+      if (result.status === 'fulfilled') {
+        // Node succeeded, store output
+        nodeOutputs[nodeId] = result.value;
+      } else {
+        // Node failed, handle error
+        const node = nodesById[nodeId];
+        const nodeData = node.data as { name?: string };
+        const nodeName = nodeData.name || node.type || 'Unknown Node';
+        const errorMessage = result.reason instanceof Error ? result.reason.message : String(result.reason);
+
+        setLogs((logs) => logs.concat(`❌ ${nodeName}: ${errorMessage}`));
+
+        // If error recovery is enabled
+        if (setCurrentError && errorRecoveryAction) {
+          setCurrentError({
+            nodeId,
+            nodeName,
+            message: errorMessage
+          });
+
+          // Wait for user decision
+          while (errorRecoveryAction.current === null) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          const action = errorRecoveryAction.current;
+          errorRecoveryAction.current = null;
+
+          if (action === 'abort') {
+            setLogs((logs) => logs.concat("🛑 Execution cancelled."));
+            setNodes(nodes => nodes.map(n => ({
+              ...n,
+              data: { ...n.data, executionState: 'idle' as const }
+            })));
+            return;
+          }
+          // For skip or retry, continue (retry logic would need level re-execution)
+          // For now, we skip failed nodes and continue
+        }
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, STEP_DELAY_MS));
+  }
+
+  setLogs((logs) => logs.concat("✅ Done."));
+}

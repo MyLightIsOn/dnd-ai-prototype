@@ -13,9 +13,9 @@ import React, { useMemo, useState, useRef } from "react";
 import { exportJSON } from "@/lib/exportJSON";
 import { importJSON } from "@/lib/importJSON";
 import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis } from "@/lib/addSample";
-import { run as runLib, type ExecutionStatus } from "@/lib/run";
+import { runParallel as runLib, type ExecutionStatus } from "@/lib/execution/parallel-runner";
 
-import type { AgentData, ToolData, OutputData, TypedNode, PromptData, DocumentData, ChunkerData } from "@/types";
+import type { AgentData, ToolData, OutputData, TypedNode, PromptData, DocumentData, ChunkerData, NodeData } from "@/types";
 
 export default function App() {
   const [nodes, setNodes] = useState<TypedNode[]>([]);
@@ -38,7 +38,7 @@ export default function App() {
   );
 
   const updateSelected = (
-    patch: Partial<AgentData & ToolData & OutputData & PromptData & DocumentData & ChunkerData>,
+    patch: Partial<NodeData>,
   ) => {
     if (!selectedId) return;
     setNodes((nds) =>

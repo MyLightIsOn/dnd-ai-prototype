@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import { Bug, Download, Play, Pause, SkipForward, X, Settings, Trash2, Upload, ChevronDown } from "lucide-react";
 import { Button } from "../ui/button";
-import type { ExecutionStatus } from "@/lib/run";
+import type { ExecutionStatus } from "@/lib/execution/parallel-runner";
 
 function ToolBar({
   onRun,

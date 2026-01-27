@@ -7,6 +7,7 @@ import { getProvider } from "@/lib/providers";
 import { getApiKey } from "@/lib/storage/api-keys";
 import type { Message } from "@/lib/providers/base";
 import { chunkDocument } from "@/lib/document/chunker";
+import { groupNodesByLevel } from "@/lib/execution/levels";
 
 /**
  * Build the message array for an LLM completion request.
@@ -86,9 +87,13 @@ export async function run(
   // Optional small delay between node executions for UX purposes
   const STEP_DELAY_MS = 200;
 
-  // Execute nodes in topological order so dependencies are processed first
-  let nodeIndex = 0;
-  while (nodeIndex < topologicalOrder.length) {
+  // Group nodes into levels for parallel execution
+  const levels = groupNodesByLevel(topologicalOrder, edges);
+
+  /**
+   * Execute a single node and return its output
+   */
+  const executeNode = async (nodeId: Id): Promise<string> => {
     const nodeId = topologicalOrder[nodeIndex];
     // Check for cancellation
     if (executionControl?.current === 'cancelled') {

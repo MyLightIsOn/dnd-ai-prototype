@@ -1,20 +1,19 @@
 import React, { useState } from "react";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
-import type { AgentData, ToolData, OutputData, PromptData, DocumentData, ChunkerData } from "@/types";
+import type { AgentData, ToolData, OutputData, PromptData, DocumentData, ChunkerData, RouterData, NodeData } from "@/types";
 import type { TypedNode } from "@/types";
 import { getAllModels } from "@/lib/providers";
 import { DocumentProperties } from "./document-properties";
 import { ChunkerProperties } from "./chunker-properties";
+import { RouterProperties } from "./router-properties";
 
 function PropertiesPanel({
   selected,
   onChange,
 }: {
   selected: TypedNode | null | undefined;
-  onChange: (
-    patch: Partial<AgentData & ToolData & OutputData & PromptData & DocumentData & ChunkerData>,
-  ) => void;
+  onChange: (patch: Partial<NodeData>) => void;
 }) {
   if (!selected)
     return (
@@ -96,6 +95,12 @@ function PropertiesPanel({
       {type === "chunker" && (
         <ChunkerProperties
           data={data as ChunkerData}
+          onChange={onChange}
+        />
+      )}
+      {type === "router" && (
+        <RouterProperties
+          data={data as RouterData}
           onChange={onChange}
         />
       )}
