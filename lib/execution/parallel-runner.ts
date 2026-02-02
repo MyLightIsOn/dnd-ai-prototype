@@ -293,7 +293,10 @@ async function executeNode(
         output = input;
       } else {
         // No route matched and no default route configured
-        throw new Error(`Router "${routerData.name || 'Router'}": No routes matched and no default route configured`);
+        throw new Error(
+          `Router "${routerData.name || 'Router'}": No routes matched and no default route configured. ` +
+          `Either add a default route or adjust route conditions to match the input.`
+        );
       }
 
       // Store selected route in node data
