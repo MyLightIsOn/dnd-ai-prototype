@@ -1,0 +1,73 @@
+{
+  "nodes": [
+    {
+      "id": "prompt-1",
+      "type": "prompt",
+      "position": { "x": 100, "y": 100 },
+      "data": {
+        "name": "Initial Input",
+        "text": "Count: 0"
+      }
+    },
+    {
+      "id": "loop-1",
+      "type": "loop",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "name": "Counter Loop",
+        "maxIterations": 5,
+        "currentIteration": 0,
+        "breakCondition": {
+          "type": "always"
+        }
+      }
+    },
+    {
+      "id": "agent-1",
+      "type": "agent",
+      "position": { "x": 100, "y": 300 },
+      "data": {
+        "name": "Increment Counter",
+        "prompt": "Increment the count by 1",
+        "model": "mock",
+        "mode": "mock"
+      }
+    },
+    {
+      "id": "result-1",
+      "type": "result",
+      "position": { "x": 100, "y": 450 },
+      "data": {
+        "name": "Final Count"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "prompt-1",
+      "target": "loop-1",
+      "markerEnd": { "type": "arrowclosed" }
+    },
+    {
+      "id": "e2",
+      "source": "loop-1",
+      "sourceHandle": "continue",
+      "target": "agent-1",
+      "markerEnd": { "type": "arrowclosed" }
+    },
+    {
+      "id": "e3",
+      "source": "agent-1",
+      "target": "loop-1",
+      "markerEnd": { "type": "arrowclosed" }
+    },
+    {
+      "id": "e4",
+      "source": "loop-1",
+      "sourceHandle": "exit",
+      "target": "result-1",
+      "markerEnd": { "type": "arrowclosed" }
+    }
+  ]
+}
