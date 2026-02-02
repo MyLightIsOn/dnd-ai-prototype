@@ -1,7 +1,7 @@
 import React from "react";
 import { topoSort } from "@/lib/topoSort";
 import type { Edge } from "@xyflow/react";
-import type { AgentData, ToolData, TypedNode, Id, ChunkerData, RouterData } from "@/types";
+import type { AgentData, ToolData, TypedNode, Id, ChunkerData, RouterData, LoopData } from "@/types";
 import type { DocumentData } from "@/types/document";
 import { getProvider } from "@/lib/providers";
 import { getApiKey } from "@/lib/storage/api-keys";
@@ -9,11 +9,13 @@ import type { Message } from "@/lib/providers/base";
 import { chunkDocument } from "@/lib/document/chunker";
 import { groupNodesByLevel } from "./levels";
 import { evaluateRoutes } from "./route-evaluator";
+import { shouldBreakLoop } from "./loop-evaluator";
 
 /**
- * Filters edges based on router execution decisions.
- * For router nodes: only keeps edges where sourceHandle matches the selected route.
- * For non-router nodes: keeps all edges.
+ * Filters edges based on router and loop execution decisions.
+ * - For router nodes: only keeps edges where sourceHandle matches the selected route.
+ * - For loop nodes: only keeps continue or exit edge based on executedExit flag.
+ * - For other nodes: keeps all edges.
  *
  * @param allEdges - All edges in the workflow
  * @param nodesById - Map of node IDs to node objects
@@ -26,35 +28,59 @@ function getActiveEdges(
   return allEdges.filter(edge => {
     const sourceNode = nodesById[edge.source as Id];
 
-    // If source node doesn't exist or is not a router, keep the edge
-    if (!sourceNode || sourceNode.type !== 'router') {
+    // If source node doesn't exist, keep the edge
+    if (!sourceNode) {
       return true;
     }
 
-    const routerData = sourceNode.data as RouterData;
+    // Handle router nodes
+    if (sourceNode.type === 'router') {
+      const routerData = sourceNode.data as RouterData;
 
-    // If router hasn't executed yet, keep the edge (will be filtered later)
-    if (!routerData.executedRoute) {
-      return true;
+      // If router hasn't executed yet, keep the edge (will be filtered later)
+      if (!routerData.executedRoute) {
+        return true;
+      }
+
+      // For backward compatibility: if edge has no sourceHandle, keep it
+      if (!edge.sourceHandle) {
+        return true;
+      }
+
+      // Keep edge only if sourceHandle matches the executed route ID
+      const isMatch = edge.sourceHandle === routerData.executedRoute;
+
+      // Add warning if mismatch (helps debug)
+      if (!isMatch && edge.sourceHandle && routerData.executedRoute) {
+        console.warn(
+          `Router ${edge.source}: edge sourceHandle "${edge.sourceHandle}" ` +
+          `doesn't match executed route "${routerData.executedRoute}"`
+        );
+      }
+
+      return isMatch;
     }
 
-    // For backward compatibility: if edge has no sourceHandle, keep it
-    if (!edge.sourceHandle) {
-      return true;
+    // Handle loop nodes
+    if (sourceNode.type === 'loop') {
+      const loopData = sourceNode.data as LoopData;
+
+      // For backward compatibility: if edge has no sourceHandle, keep it
+      if (!edge.sourceHandle) {
+        return true;
+      }
+
+      // If loop has exited, only keep exit edge
+      if (loopData.executedExit) {
+        return edge.sourceHandle === 'exit';
+      }
+
+      // If loop is continuing, only keep continue edge
+      return edge.sourceHandle === 'continue';
     }
 
-    // Keep edge only if sourceHandle matches the executed route ID
-    const isMatch = edge.sourceHandle === routerData.executedRoute;
-
-    // Add warning if mismatch (helps debug)
-    if (!isMatch && edge.sourceHandle && routerData.executedRoute) {
-      console.warn(
-        `Router ${edge.source}: edge sourceHandle "${edge.sourceHandle}" ` +
-        `doesn't match executed route "${routerData.executedRoute}"`
-      );
-    }
-
-    return isMatch;
+    // For all other node types, keep the edge
+    return true;
   });
 }
 
@@ -307,6 +333,61 @@ async function executeNode(
             : mapped,
         ),
       );
+    } else if (node.type === "loop") {
+      // Loop node - manage iteration counting and break conditions
+      const loopData = node.data as LoopData;
+      const dependencyOutputs = incomingEdgesByNode[node.id]
+        .map((depId) => nodeOutputs[depId])
+        .filter(Boolean);
+
+      const input = dependencyOutputs.join('\n\n');
+
+      // Increment iteration counter
+      const newIteration = loopData.currentIteration + 1;
+
+      // Check if we've reached max iterations
+      const maxIterations = loopData.maxIterations || 10;
+      const reachedMaxIterations = newIteration >= maxIterations;
+
+      // Check break condition
+      const shouldBreak = reachedMaxIterations ||
+        await shouldBreakLoop(loopData.breakCondition, input, newIteration);
+
+      // Determine if loop should exit
+      const executedExit = shouldBreak;
+
+      // Log iteration status
+      if (executedExit) {
+        const reason = reachedMaxIterations
+          ? `reached max iterations (${maxIterations})`
+          : 'break condition met';
+        setLogs(logs => logs.concat(
+          `🔁 ${loopData.name || 'Loop'}: Iteration ${newIteration} - Exiting (${reason})`
+        ));
+      } else {
+        setLogs(logs => logs.concat(
+          `🔁 ${loopData.name || 'Loop'}: Iteration ${newIteration} - Continuing`
+        ));
+      }
+
+      // Update loop node data with new iteration and exit status
+      setNodes((currentNodes) =>
+        currentNodes.map((mapped) =>
+          mapped.id === node.id
+            ? {
+                ...mapped,
+                data: {
+                  ...mapped.data,
+                  currentIteration: newIteration,
+                  executedExit
+                }
+              }
+            : mapped,
+        ),
+      );
+
+      // Pass through input to next node
+      output = input;
     } else if (node.type === "result") {
       // Result node
       const incomingNodes = incomingEdgesByNode[node.id] || [];
@@ -374,6 +455,24 @@ export async function runParallel(
   // Clear previous logs
   setLogs([]);
 
+  // Reset all nodes to idle state and clear loop counters
+  setNodes(nodes => nodes.map(node => {
+    if (node.type === 'loop') {
+      const loopData = node.data as LoopData;
+      return {
+        ...node,
+        data: {
+          ...loopData,
+          currentIteration: 0,
+          executedExit: false,
+          executionState: 'idle' as const,
+          executionError: undefined
+        }
+      };
+    }
+    return node;
+  }));
+
   // Reset all edges to default style at start of run
   setEdges(edges => edges.map(edge => ({
     ...edge,
@@ -428,13 +527,31 @@ export async function runParallel(
   setLogs((logs) => logs.concat(`🚀 Executing ${levels.length} level(s) with parallel nodes...`));
 
   const STEP_DELAY_MS = 200;
+  const GLOBAL_ITERATION_LIMIT = 1000;
 
   // Track which nodes have been executed to avoid re-execution
   const executedNodes = new Set<Id>();
 
+  // Track global iteration count to prevent infinite loops
+  let globalIterationCount = 0;
+
   // Execute each level sequentially
   for (let levelIndex = 0; levelIndex < levels.length; levelIndex++) {
     const level = levels[levelIndex];
+
+    // Check global iteration limit
+    globalIterationCount++;
+    if (globalIterationCount > GLOBAL_ITERATION_LIMIT) {
+      setLogs((logs) => logs.concat(
+        `🚨 Global iteration limit exceeded (${GLOBAL_ITERATION_LIMIT}). ` +
+        `This likely indicates an infinite loop. Aborting execution.`
+      ));
+      setNodes(nodes => nodes.map(n => ({
+        ...n,
+        data: { ...n.data, executionState: 'idle' as const }
+      })));
+      return;
+    }
 
     // Skip nodes that have already been executed
     const nodesToExecute = level.filter(nodeId => !executedNodes.has(nodeId));
@@ -491,8 +608,9 @@ export async function runParallel(
       nodesToExecute.map(nodeId => executeNode(nodeId, context))
     );
 
-    // Track if this level contains any router nodes
+    // Track if this level contains any router or loop nodes
     let hasRouterInLevel = false;
+    let hasLoopInLevel = false;
 
     // Process results and handle errors
     for (let i = 0; i < nodesToExecute.length; i++) {
@@ -502,10 +620,12 @@ export async function runParallel(
       // Mark node as executed
       executedNodes.add(nodeId);
 
-      // Check if this node is a router
+      // Check if this node is a router or loop
       const node = nodesById[nodeId];
       if (node.type === 'router') {
         hasRouterInLevel = true;
+      } else if (node.type === 'loop') {
+        hasLoopInLevel = true;
       }
 
       if (result.status === 'fulfilled') {
@@ -552,9 +672,9 @@ export async function runParallel(
 
     await new Promise((resolve) => setTimeout(resolve, STEP_DELAY_MS));
 
-    // If this level contained routers, recalculate levels with filtered edges
-    if (hasRouterInLevel) {
-      // Get active edges based on router decisions
+    // If this level contained routers or loops, recalculate levels with filtered edges
+    if (hasRouterInLevel || hasLoopInLevel) {
+      // Get active edges based on router and loop decisions
       const activeEdges = getActiveEdges(edges, nodesById);
 
       // Build set of active edge IDs for quick lookup
@@ -570,20 +690,40 @@ export async function runParallel(
             animated: true
           };
         } else {
-          // Check if this edge comes from a router that has executed
+          // Check if this edge comes from a router or loop that has executed
           const sourceNode = nodesById[edge.source as Id];
-          if (sourceNode && sourceNode.type === 'router') {
-            const routerData = sourceNode.data as RouterData;
-            if (routerData.executedRoute) {
-              // Non-selected path from executed router: gray, thin, dimmed, not animated
-              return {
-                ...edge,
-                style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
-                animated: false
-              };
+          if (sourceNode) {
+            if (sourceNode.type === 'router') {
+              const routerData = sourceNode.data as RouterData;
+              if (routerData.executedRoute) {
+                // Non-selected path from executed router: gray, thin, dimmed, not animated
+                return {
+                  ...edge,
+                  style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
+                  animated: false
+                };
+              }
+            } else if (sourceNode.type === 'loop') {
+              const loopData = sourceNode.data as LoopData;
+              // Dim the non-selected loop edge
+              if (edge.sourceHandle === 'continue' && loopData.executedExit) {
+                // Continue edge when loop exited: dimmed
+                return {
+                  ...edge,
+                  style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
+                  animated: false
+                };
+              } else if (edge.sourceHandle === 'exit' && !loopData.executedExit) {
+                // Exit edge when loop continuing: dimmed
+                return {
+                  ...edge,
+                  style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
+                  animated: false
+                };
+              }
             }
           }
-          // Edge not from an executed router: keep current style
+          // Edge not from an executed router/loop: keep current style
           return edge;
         }
       }));
@@ -602,6 +742,57 @@ export async function runParallel(
         }
       });
 
+      // For loops that are continuing, need to add loop body nodes back to execution
+      if (hasLoopInLevel) {
+        // Check if any loops in this level are continuing
+        const continuingLoops = nodesToExecute.filter(nodeId => {
+          const node = nodesById[nodeId];
+          if (node.type === 'loop') {
+            const loopData = node.data as LoopData;
+            return !loopData.executedExit;
+          }
+          return false;
+        });
+
+        if (continuingLoops.length > 0) {
+          // For continuing loops, we need to re-add nodes in the loop body to execution
+          // Clear executedNodes for loop body nodes so they can execute again
+          continuingLoops.forEach(loopNodeId => {
+            // Find all nodes reachable from the continue handle
+            const loopBodyNodes = new Set<Id>();
+            const queue: Id[] = [];
+
+            // Start with nodes directly connected to continue handle
+            activeEdges
+              .filter(edge => edge.source === loopNodeId && edge.sourceHandle === 'continue')
+              .forEach(edge => {
+                const targetId = edge.target as Id;
+                loopBodyNodes.add(targetId);
+                queue.push(targetId);
+              });
+
+            // BFS to find all nodes in loop body (until we reach the loop node again)
+            while (queue.length > 0) {
+              const currentId = queue.shift()!;
+              activeEdges
+                .filter(edge => edge.source === currentId && edge.target !== loopNodeId)
+                .forEach(edge => {
+                  const targetId = edge.target as Id;
+                  if (!loopBodyNodes.has(targetId)) {
+                    loopBodyNodes.add(targetId);
+                    queue.push(targetId);
+                  }
+                });
+            }
+
+            // Clear executed status for loop body nodes
+            loopBodyNodes.forEach(nodeId => {
+              executedNodes.delete(nodeId);
+            });
+          });
+        }
+      }
+
       // Get remaining nodes (not yet executed)
       const remainingNodes = topologicalOrder.filter(nodeId => !executedNodes.has(nodeId));
 
@@ -615,7 +806,13 @@ export async function runParallel(
           ...newLevels
         ];
 
-        setLogs((logs) => logs.concat(`🔀 Recalculated execution path based on router decisions`));
+        if (hasRouterInLevel && hasLoopInLevel) {
+          setLogs((logs) => logs.concat(`🔀 Recalculated execution path based on router and loop decisions`));
+        } else if (hasRouterInLevel) {
+          setLogs((logs) => logs.concat(`🔀 Recalculated execution path based on router decisions`));
+        } else {
+          setLogs((logs) => logs.concat(`🔁 Recalculated execution path based on loop decisions`));
+        }
       }
     }
   }
