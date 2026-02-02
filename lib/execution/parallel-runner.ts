@@ -278,26 +278,32 @@ async function executeNode(
       // Evaluate routes
       const selectedRouteId = await evaluateRoutes(input, routerData);
 
-      // Store selected route
-      // If no route matched, store "default" to match the default handle ID
+      // Determine which route to use
+      let executedRoute: string;
+      if (selectedRouteId) {
+        // A route matched
+        executedRoute = selectedRouteId;
+        const selectedRoute = routerData.routes?.find(r => r.id === selectedRouteId);
+        setLogs(logs => logs.concat(`🔀 ${routerData.name || 'Router'}: Routed to "${selectedRoute?.label || 'Unknown'}"`));
+        output = input; // Pass through input to selected route
+      } else if (routerData.defaultRoute) {
+        // No route matched, but default route is configured
+        executedRoute = 'default';
+        setLogs(logs => logs.concat(`⚠️ ${routerData.name || 'Router'}: No routes matched, using default route`));
+        output = input;
+      } else {
+        // No route matched and no default route configured
+        throw new Error(`Router "${routerData.name || 'Router'}": No routes matched and no default route configured`);
+      }
+
+      // Store selected route in node data
       setNodes((currentNodes) =>
         currentNodes.map((mapped) =>
           mapped.id === node.id
-            ? { ...mapped, data: { ...mapped.data, executedRoute: selectedRouteId || 'default' } }
+            ? { ...mapped, data: { ...mapped.data, executedRoute } }
             : mapped,
         ),
       );
-
-      const selectedRoute = routerData.routes?.find(r => r.id === selectedRouteId);
-      if (selectedRoute) {
-        setLogs(logs => logs.concat(`🔀 ${routerData.name || 'Router'}: Routed to "${selectedRoute.label}"`));
-        output = input; // Pass through input to selected route
-      } else if (routerData.defaultRoute) {
-        setLogs(logs => logs.concat(`🔀 ${routerData.name || 'Router'}: Using default route (no matches)`));
-        output = input;
-      } else {
-        throw new Error('No matching route and no default route configured');
-      }
     } else if (node.type === "result") {
       // Result node
       const incomingNodes = incomingEdgesByNode[node.id] || [];
