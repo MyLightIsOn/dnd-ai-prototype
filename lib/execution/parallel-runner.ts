@@ -11,6 +11,44 @@ import { groupNodesByLevel } from "./levels";
 import { evaluateRoutes } from "./route-evaluator";
 
 /**
+ * Filters edges based on router execution decisions.
+ * For router nodes: only keeps edges where sourceHandle matches the selected route.
+ * For non-router nodes: keeps all edges.
+ *
+ * @param allEdges - All edges in the workflow
+ * @param nodesById - Map of node IDs to node objects
+ * @returns Filtered array of active edges
+ */
+function getActiveEdges(
+  allEdges: Edge[],
+  nodesById: Record<Id, TypedNode>
+): Edge[] {
+  return allEdges.filter(edge => {
+    const sourceNode = nodesById[edge.source as Id];
+
+    // If source node doesn't exist or is not a router, keep the edge
+    if (!sourceNode || sourceNode.type !== 'router') {
+      return true;
+    }
+
+    const routerData = sourceNode.data as RouterData;
+
+    // If router hasn't executed yet, keep the edge (will be filtered later)
+    if (!routerData.executedRoute) {
+      return true;
+    }
+
+    // For backward compatibility: if edge has no sourceHandle, keep it
+    if (!edge.sourceHandle) {
+      return true;
+    }
+
+    // Keep edge only if sourceHandle matches the executed route ID
+    return edge.sourceHandle === routerData.executedRoute;
+  });
+}
+
+/**
  * Build the message array for an LLM completion request.
  */
 function buildMessages(agentData: AgentData, inputs: string[]): Message[] {
@@ -344,15 +382,25 @@ export async function runParallel(
   const nodeOutputs: Record<Id, string> = {};
 
   // Group nodes by dependency level
-  const levels = groupNodesByLevel(topologicalOrder, edges);
+  let levels = groupNodesByLevel(topologicalOrder, edges);
 
   setLogs((logs) => logs.concat(`🚀 Executing ${levels.length} level(s) with parallel nodes...`));
 
   const STEP_DELAY_MS = 200;
 
+  // Track which nodes have been executed to avoid re-execution
+  const executedNodes = new Set<Id>();
+
   // Execute each level sequentially
   for (let levelIndex = 0; levelIndex < levels.length; levelIndex++) {
     const level = levels[levelIndex];
+
+    // Skip nodes that have already been executed
+    const nodesToExecute = level.filter(nodeId => !executedNodes.has(nodeId));
+
+    if (nodesToExecute.length === 0) {
+      continue;
+    }
 
     // Check for cancellation
     if (executionControl?.current === 'cancelled') {
@@ -384,8 +432,8 @@ export async function runParallel(
       setLogs((logs) => logs.concat("▶️  Execution resumed."));
     }
 
-    if (level.length > 1) {
-      setLogs((logs) => logs.concat(`⚡ Level ${levelIndex + 1}: Executing ${level.length} nodes in parallel...`));
+    if (nodesToExecute.length > 1) {
+      setLogs((logs) => logs.concat(`⚡ Level ${levelIndex + 1}: Executing ${nodesToExecute.length} nodes in parallel...`));
     }
 
     const context: NodeExecutionContext = {
@@ -399,13 +447,25 @@ export async function runParallel(
 
     // Execute all nodes in this level in parallel
     const results = await Promise.allSettled(
-      level.map(nodeId => executeNode(nodeId, context))
+      nodesToExecute.map(nodeId => executeNode(nodeId, context))
     );
 
+    // Track if this level contains any router nodes
+    let hasRouterInLevel = false;
+
     // Process results and handle errors
-    for (let i = 0; i < level.length; i++) {
-      const nodeId = level[i];
+    for (let i = 0; i < nodesToExecute.length; i++) {
+      const nodeId = nodesToExecute[i];
       const result = results[i];
+
+      // Mark node as executed
+      executedNodes.add(nodeId);
+
+      // Check if this node is a router
+      const node = nodesById[nodeId];
+      if (node.type === 'router') {
+        hasRouterInLevel = true;
+      }
 
       if (result.status === 'fulfilled') {
         // Node succeeded, store output
@@ -450,6 +510,42 @@ export async function runParallel(
     }
 
     await new Promise((resolve) => setTimeout(resolve, STEP_DELAY_MS));
+
+    // If this level contained routers, recalculate levels with filtered edges
+    if (hasRouterInLevel) {
+      // Get active edges based on router decisions
+      const activeEdges = getActiveEdges(edges, nodesById);
+
+      // Update incoming edges map with filtered edges
+      // Reset for all nodes first
+      for (const nodeId in incomingEdgesByNode) {
+        incomingEdgesByNode[nodeId] = [];
+      }
+      // Rebuild with active edges only
+      activeEdges.forEach((edge) => {
+        const targetId = edge.target as Id;
+        const sourceId = edge.source as Id;
+        if (incomingEdgesByNode[targetId]) {
+          incomingEdgesByNode[targetId].push(sourceId);
+        }
+      });
+
+      // Get remaining nodes (not yet executed)
+      const remainingNodes = topologicalOrder.filter(nodeId => !executedNodes.has(nodeId));
+
+      if (remainingNodes.length > 0) {
+        // Recalculate levels for remaining nodes using filtered edges
+        const newLevels = groupNodesByLevel(remainingNodes, activeEdges);
+
+        // Replace remaining levels with recalculated ones
+        levels = [
+          ...levels.slice(0, levelIndex + 1),
+          ...newLevels
+        ];
+
+        setLogs((logs) => logs.concat(`🔀 Recalculated execution path based on router decisions`));
+      }
+    }
   }
 
   setLogs((logs) => logs.concat("✅ Done."));
