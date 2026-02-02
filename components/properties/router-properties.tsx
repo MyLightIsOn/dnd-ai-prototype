@@ -2,7 +2,7 @@ import React from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
-import type { RouterData, Route, KeywordCondition, SentimentCondition, LLMJudgeCondition } from "@/types/router";
+import type { RouterData, Route, KeywordCondition, SentimentCondition, LLMJudgeCondition, JSONFieldCondition } from "@/types/router";
 import { Plus, Trash2 } from "lucide-react";
 import { getAllModels } from "@/lib/providers";
 
@@ -16,14 +16,16 @@ export function RouterProperties({
   const models = getAllModels();
 
   const addRoute = () => {
-    let condition: KeywordCondition | SentimentCondition | LLMJudgeCondition;
+    let condition: KeywordCondition | SentimentCondition | LLMJudgeCondition | JSONFieldCondition;
 
     if (data.strategy === 'keyword') {
       condition = { type: 'keyword', keywords: [], matchMode: 'any', caseSensitive: false };
     } else if (data.strategy === 'sentiment') {
       condition = { type: 'sentiment', targetSentiment: 'positive', threshold: 0.5 };
-    } else {
+    } else if (data.strategy === 'llm-judge') {
       condition = { type: 'llm-judge', judgePrompt: '' };
+    } else {
+      condition = { type: 'json-field', field: '', operator: 'equals', value: '' };
     }
 
     const newRoute: Route = {
@@ -78,6 +80,15 @@ export function RouterProperties({
     }
   };
 
+  const updateJSONFieldCondition = (routeId: string, updates: Partial<JSONFieldCondition>) => {
+    const route = data.routes?.find(r => r.id === routeId);
+    if (route && route.condition.type === 'json-field') {
+      updateRoute(routeId, {
+        condition: { ...route.condition, ...updates }
+      });
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Strategy Selector */}
@@ -87,7 +98,7 @@ export function RouterProperties({
           className="px-3 py-2 border rounded-md text-sm"
           value={data.strategy}
           onChange={(e) => {
-            const newStrategy = e.target.value as 'keyword' | 'sentiment' | 'llm-judge';
+            const newStrategy = e.target.value as 'keyword' | 'sentiment' | 'llm-judge' | 'json-field';
             onChange({
               strategy: newStrategy,
               // Reset routes when changing strategy
@@ -98,13 +109,16 @@ export function RouterProperties({
           <option value="keyword">Keyword Matching</option>
           <option value="sentiment">Sentiment Analysis</option>
           <option value="llm-judge">LLM Judge</option>
+          <option value="json-field">JSON Field</option>
         </select>
         <div className="text-xs text-gray-500">
           {data.strategy === 'keyword'
             ? 'Route based on keyword presence in input'
             : data.strategy === 'sentiment'
             ? 'Route based on sentiment classification'
-            : 'Route based on LLM classification (requires API key)'}
+            : data.strategy === 'llm-judge'
+            ? 'Route based on LLM classification (requires API key)'
+            : 'Route based on JSON field value comparison'}
         </div>
       </div>
 
@@ -248,6 +262,70 @@ export function RouterProperties({
                       />
                       <div className="text-xs text-gray-500">
                         Instructions for the LLM judge. The LLM will be asked to respond with "{route.label}" if the input matches this route.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* JSON Field Condition */}
+                {route.condition.type === 'json-field' && (
+                  <div className="space-y-2">
+                    <div className="grid gap-2">
+                      <label className="text-xs text-gray-600">Field Path</label>
+                      <Input
+                        placeholder="status (or nested: user.name)"
+                        value={route.condition.field}
+                        onChange={(e) =>
+                          updateJSONFieldCondition(route.id, {
+                            field: e.target.value
+                          })
+                        }
+                        className="text-sm"
+                      />
+                      <div className="text-xs text-gray-500">
+                        JSON field to extract. Use dot notation for nested fields (e.g., "user.name")
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-xs text-gray-600">Operator</label>
+                      <select
+                        className="px-2 py-1 border rounded text-sm"
+                        value={route.condition.operator}
+                        onChange={(e) =>
+                          updateJSONFieldCondition(route.id, {
+                            operator: e.target.value as 'equals' | 'contains' | 'gt' | 'lt'
+                          })
+                        }
+                      >
+                        <option value="equals">Equals</option>
+                        <option value="contains">Contains</option>
+                        <option value="gt">Greater Than (&gt;)</option>
+                        <option value="lt">Less Than (&lt;)</option>
+                      </select>
+                      <div className="text-xs text-gray-500">
+                        {route.condition.operator === 'equals'
+                          ? 'Exact match (case-insensitive)'
+                          : route.condition.operator === 'contains'
+                          ? 'Substring match (case-insensitive)'
+                          : route.condition.operator === 'gt'
+                          ? 'Numeric comparison (field > value)'
+                          : 'Numeric comparison (field < value)'}
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-xs text-gray-600">Value</label>
+                      <Input
+                        placeholder={route.condition.operator === 'gt' || route.condition.operator === 'lt' ? '10' : 'urgent'}
+                        value={route.condition.value}
+                        onChange={(e) =>
+                          updateJSONFieldCondition(route.id, {
+                            value: e.target.value
+                          })
+                        }
+                        className="text-sm"
+                      />
+                      <div className="text-xs text-gray-500">
+                        Value to compare against
                       </div>
                     </div>
                   </div>

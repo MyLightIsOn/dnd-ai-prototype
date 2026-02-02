@@ -4,8 +4,8 @@
  * Evaluates router conditions and determines which route to take based on input content.
  */
 
-import type { Route, RouterData, KeywordCondition, SentimentCondition, LLMJudgeCondition } from "@/types/router";
-import { isKeywordCondition, isSentimentCondition, isLLMJudgeCondition } from "@/types/router";
+import type { Route, RouterData, KeywordCondition, SentimentCondition, LLMJudgeCondition, JSONFieldCondition } from "@/types/router";
+import { isKeywordCondition, isSentimentCondition, isLLMJudgeCondition, isJSONFieldCondition } from "@/types/router";
 import { getProvider } from "@/lib/providers";
 import { getApiKey } from "@/lib/storage/api-keys";
 import type { Message } from "@/lib/providers/base";
@@ -65,6 +65,8 @@ async function evaluateRoute(
     return await evaluateSentimentCondition(input, condition);
   } else if (isLLMJudgeCondition(condition)) {
     return await evaluateLLMJudgeCondition(input, route, routerData, onLLMJudgeResult);
+  } else if (isJSONFieldCondition(condition)) {
+    return evaluateJSONFieldCondition(input, condition);
   }
 
   return false;
@@ -303,5 +305,94 @@ Respond with ONLY the route label "${route.label}" if it matches, or "none" if i
     // Re-throw with more context
     const errorMsg = error instanceof Error ? error.message : String(error);
     throw new Error(`LLM judge evaluation failed: ${errorMsg}`);
+  }
+}
+
+/**
+ * JSON Field Evaluation
+ *
+ * Parses JSON from input and extracts a field value for comparison.
+ * Supports nested field paths using dot notation (e.g., "user.name").
+ */
+function evaluateJSONFieldCondition(
+  input: string,
+  condition: JSONFieldCondition
+): boolean {
+  try {
+    // Parse JSON from input
+    const jsonData = JSON.parse(input);
+
+    // Extract field value using dot notation
+    const fieldValue = getNestedValue(jsonData, condition.field);
+
+    if (fieldValue === undefined) {
+      // Field not found in JSON
+      return false;
+    }
+
+    // Apply operator
+    return applyOperator(fieldValue, condition.operator, condition.value);
+  } catch (error) {
+    // JSON parsing failed - return false instead of throwing
+    console.error('JSON parsing failed in route evaluation:', error);
+    return false;
+  }
+}
+
+/**
+ * Extract nested value from object using dot notation
+ * Example: getNestedValue({user: {name: "Alice"}}, "user.name") returns "Alice"
+ */
+function getNestedValue(obj: any, path: string): any {
+  const parts = path.split('.');
+  let current = obj;
+
+  for (const part of parts) {
+    if (current === null || current === undefined) {
+      return undefined;
+    }
+    current = current[part];
+  }
+
+  return current;
+}
+
+/**
+ * Apply comparison operator
+ */
+function applyOperator(
+  fieldValue: any,
+  operator: 'equals' | 'contains' | 'gt' | 'lt',
+  compareValue: string
+): boolean {
+  switch (operator) {
+    case 'equals':
+      // Convert both to strings for comparison
+      return String(fieldValue).toLowerCase() === compareValue.toLowerCase();
+
+    case 'contains':
+      // Check if field value contains the compare value (case-insensitive)
+      return String(fieldValue).toLowerCase().includes(compareValue.toLowerCase());
+
+    case 'gt':
+      // Greater than (numeric comparison)
+      const numField = Number(fieldValue);
+      const numCompare = Number(compareValue);
+      if (isNaN(numField) || isNaN(numCompare)) {
+        return false; // Non-numeric values fail
+      }
+      return numField > numCompare;
+
+    case 'lt':
+      // Less than (numeric comparison)
+      const numFieldLt = Number(fieldValue);
+      const numCompareLt = Number(compareValue);
+      if (isNaN(numFieldLt) || isNaN(numCompareLt)) {
+        return false; // Non-numeric values fail
+      }
+      return numFieldLt < numCompareLt;
+
+    default:
+      return false;
   }
 }

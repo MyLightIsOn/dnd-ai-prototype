@@ -16,7 +16,7 @@ export interface RouterData {
   executionError?: string;
 }
 
-export type RouterStrategy = 'keyword' | 'sentiment' | 'llm-judge';
+export type RouterStrategy = 'keyword' | 'sentiment' | 'llm-judge' | 'json-field';
 
 export interface Route {
   id: string;
@@ -30,7 +30,8 @@ export interface Route {
 export type RouteCondition =
   | KeywordCondition
   | SentimentCondition
-  | LLMJudgeCondition;
+  | LLMJudgeCondition
+  | JSONFieldCondition;
 
 /**
  * Keyword Matching Condition
@@ -64,6 +65,17 @@ export interface LLMJudgeCondition {
 }
 
 /**
+ * JSON Field Condition
+ * Extracts a field from JSON and compares it to a value
+ */
+export interface JSONFieldCondition {
+  type: 'json-field';
+  field: string; // JSON field path (e.g., "status", "user.name")
+  operator: 'equals' | 'contains' | 'gt' | 'lt'; // Comparison operator
+  value: string; // Value to compare against
+}
+
+/**
  * Type guards for route conditions
  */
 export function isKeywordCondition(condition: RouteCondition): condition is KeywordCondition {
@@ -76,6 +88,10 @@ export function isSentimentCondition(condition: RouteCondition): condition is Se
 
 export function isLLMJudgeCondition(condition: RouteCondition): condition is LLMJudgeCondition {
   return condition.type === 'llm-judge';
+}
+
+export function isJSONFieldCondition(condition: RouteCondition): condition is JSONFieldCondition {
+  return condition.type === 'json-field';
 }
 
 /**
