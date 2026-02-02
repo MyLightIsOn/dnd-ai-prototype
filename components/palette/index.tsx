@@ -54,6 +54,15 @@ function Pallette() {
           ]
         }}
       />
+      <PaletteItem
+        type="loop"
+        label="Loop"
+        meta={{
+          name: "Loop",
+          maxIterations: 10,
+          currentIteration: 0
+        }}
+      />
       <PaletteItem type="result" label="Result" meta={{ name: "Result" }} />
 
       <div className="pt-2 text-[11px] text-gray-500">
