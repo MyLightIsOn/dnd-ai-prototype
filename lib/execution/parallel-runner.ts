@@ -44,7 +44,17 @@ function getActiveEdges(
     }
 
     // Keep edge only if sourceHandle matches the executed route ID
-    return edge.sourceHandle === routerData.executedRoute;
+    const isMatch = edge.sourceHandle === routerData.executedRoute;
+
+    // Add warning if mismatch (helps debug)
+    if (!isMatch && edge.sourceHandle && routerData.executedRoute) {
+      console.warn(
+        `Router ${edge.source}: edge sourceHandle "${edge.sourceHandle}" ` +
+        `doesn't match executed route "${routerData.executedRoute}"`
+      );
+    }
+
+    return isMatch;
   });
 }
 
@@ -269,10 +279,11 @@ async function executeNode(
       const selectedRouteId = await evaluateRoutes(input, routerData);
 
       // Store selected route
+      // If no route matched, store "default" to match the default handle ID
       setNodes((currentNodes) =>
         currentNodes.map((mapped) =>
           mapped.id === node.id
-            ? { ...mapped, data: { ...mapped.data, executedRoute: selectedRouteId || routerData.defaultRoute } }
+            ? { ...mapped, data: { ...mapped.data, executedRoute: selectedRouteId || 'default' } }
             : mapped,
         ),
       );
