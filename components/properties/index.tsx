@@ -78,13 +78,32 @@ function PropertiesPanel({
         </>
       )}
       {type === "result" && (
-        <div className="grid gap-2">
-          <label className="text-xs text-gray-600">Label</label>
-          <Input
-            value={data.name || "Output"}
-            onChange={(e) => onChange({ name: e.target.value })}
-          />
-        </div>
+        <>
+          <div className="grid gap-2">
+            <label className="text-xs text-gray-600">Label</label>
+            <Input
+              value={data.name || "Output"}
+              onChange={(e) => onChange({ name: e.target.value })}
+            />
+          </div>
+          <div className="grid gap-2">
+            <label className="text-xs text-gray-600">Output</label>
+            <div className="relative w-full">
+              <Textarea
+                rows={12}
+                value={(data as OutputData).preview || "(No output yet)"}
+                readOnly
+                className="font-mono text-xs bg-gray-50 resize-none"
+                placeholder="Output will appear here after execution..."
+              />
+            </div>
+            {(data as OutputData).preview && (
+              <div className="text-[10px] text-gray-500">
+                {(data as OutputData).preview!.length.toLocaleString()} characters
+              </div>
+            )}
+          </div>
+        </>
       )}
       {type === "document" && (
         <DocumentProperties

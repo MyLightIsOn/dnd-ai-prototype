@@ -264,11 +264,11 @@ async function executeNode(
       output = finalText;
       setLogs((logs) => logs.concat(finalText));
 
-      // Update preview
+      // Update preview with full output (no truncation)
       setNodes((currentNodes) =>
         currentNodes.map((mapped) =>
           mapped.id === node.id
-            ? { ...mapped, data: { ...mapped.data, preview: finalText.slice(0, 140) } }
+            ? { ...mapped, data: { ...mapped.data, preview: finalOutput } }
             : mapped,
         ),
       );
