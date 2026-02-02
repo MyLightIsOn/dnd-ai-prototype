@@ -381,11 +381,24 @@ export async function runParallel(
     animated: false
   })));
 
-  // Compute topological ordering and check for cycles
-  const { order: topologicalOrder, hasCycle } = topoSort(nodes, edges);
+  // Compute topological ordering and detect cycles
+  const { order: topologicalOrder, hasCycle, cycles } = topoSort(nodes, edges);
+
   if (hasCycle) {
-    setLogs((logs) => logs.concat("❌ Graph has a cycle. Break loops to run."));
-    return;
+    // Log cycle detection but continue execution
+    const cycleNodeIds = Array.from(cycles);
+    const cycleNames = cycleNodeIds
+      .map(id => {
+        const node = nodes.find(n => n.id === id);
+        const nodeData = node?.data as { name?: string } | undefined;
+        return nodeData?.name || node?.type || id;
+      })
+      .join(', ');
+
+    setLogs((logs) => logs.concat(
+      `⚠️ Cycles detected in graph (nodes: ${cycleNames}). ` +
+      `Execution will proceed with acyclic nodes.`
+    ));
   }
 
   // Build lookup maps
