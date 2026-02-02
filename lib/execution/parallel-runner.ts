@@ -357,12 +357,20 @@ export async function runParallel(
   edges: Edge[],
   setLogs: React.Dispatch<React.SetStateAction<string[]>>,
   setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>,
+  setEdges: React.Dispatch<React.SetStateAction<Edge[]>>,
   executionControl?: React.MutableRefObject<ExecutionStatus>,
   errorRecoveryAction?: React.MutableRefObject<'retry' | 'skip' | 'abort' | null>,
   setCurrentError?: React.Dispatch<React.SetStateAction<{ nodeId: string; nodeName: string; message: string } | null>>,
 ) {
   // Clear previous logs
   setLogs([]);
+
+  // Reset all edges to default style at start of run
+  setEdges(edges => edges.map(edge => ({
+    ...edge,
+    style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 1 },
+    animated: false
+  })));
 
   // Compute topological ordering and check for cycles
   const { order: topologicalOrder, hasCycle } = topoSort(nodes, edges);
@@ -526,6 +534,37 @@ export async function runParallel(
     if (hasRouterInLevel) {
       // Get active edges based on router decisions
       const activeEdges = getActiveEdges(edges, nodesById);
+
+      // Build set of active edge IDs for quick lookup
+      const activeEdgeIds = new Set(activeEdges.map(e => e.id));
+
+      // Update edge styles: green/bold/animated for selected paths, gray/thin for non-selected
+      setEdges(currentEdges => currentEdges.map(edge => {
+        if (activeEdgeIds.has(edge.id)) {
+          // Selected path: green, bold, animated, full opacity
+          return {
+            ...edge,
+            style: { stroke: '#22c55e', strokeWidth: 2, opacity: 1 },
+            animated: true
+          };
+        } else {
+          // Check if this edge comes from a router that has executed
+          const sourceNode = nodesById[edge.source as Id];
+          if (sourceNode && sourceNode.type === 'router') {
+            const routerData = sourceNode.data as RouterData;
+            if (routerData.executedRoute) {
+              // Non-selected path from executed router: gray, thin, dimmed, not animated
+              return {
+                ...edge,
+                style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
+                animated: false
+              };
+            }
+          }
+          // Edge not from an executed router: keep current style
+          return edge;
+        }
+      }));
 
       // Update incoming edges map with filtered edges
       // Reset for all nodes first
