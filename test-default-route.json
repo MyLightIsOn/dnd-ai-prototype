@@ -1,0 +1,143 @@
+{
+  "nodes": [
+    {
+      "id": "prompt-1",
+      "type": "prompt",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "name": "Input Text",
+        "text": "This is neutral content that matches no specific routes",
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "router-1",
+      "type": "router",
+      "position": { "x": 400, "y": 200 },
+      "data": {
+        "name": "Content Router",
+        "strategy": "keyword",
+        "routes": [
+          {
+            "id": "route-toxic",
+            "label": "Toxic Path",
+            "condition": {
+              "type": "keyword",
+              "keywords": ["toxic", "inappropriate", "bad"],
+              "matchMode": "any",
+              "caseSensitive": false
+            }
+          },
+          {
+            "id": "route-safe",
+            "label": "Safe Path",
+            "condition": {
+              "type": "keyword",
+              "keywords": ["good", "great", "excellent"],
+              "matchMode": "any",
+              "caseSensitive": false
+            }
+          }
+        ],
+        "defaultRoute": "route-default",
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "agent-toxic",
+      "type": "agent",
+      "position": { "x": 750, "y": 50 },
+      "data": {
+        "name": "Toxic Handler",
+        "model": "openai/gpt-4o-mini",
+        "prompt": "Handle toxic content",
+        "mode": "mock",
+        "streaming": false,
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "agent-safe",
+      "type": "agent",
+      "position": { "x": 750, "y": 200 },
+      "data": {
+        "name": "Safe Handler",
+        "model": "openai/gpt-4o-mini",
+        "prompt": "Handle safe content",
+        "mode": "mock",
+        "streaming": false,
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "agent-default",
+      "type": "agent",
+      "position": { "x": 750, "y": 350 },
+      "data": {
+        "name": "Default Handler",
+        "model": "openai/gpt-4o-mini",
+        "prompt": "Handle neutral/unmatched content",
+        "mode": "mock",
+        "streaming": false,
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "result-1",
+      "type": "result",
+      "position": { "x": 1100, "y": 200 },
+      "data": {
+        "name": "Final Output",
+        "preview": "",
+        "executionState": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "prompt-1",
+      "target": "router-1",
+      "markerEnd": { "type": "arrowclosed" }
+    },
+    {
+      "id": "edge-2",
+      "source": "router-1",
+      "sourceHandle": "route-toxic",
+      "target": "agent-toxic",
+      "markerEnd": { "type": "arrowclosed" }
+    },
+    {
+      "id": "edge-3",
+      "source": "router-1",
+      "sourceHandle": "route-safe",
+      "target": "agent-safe",
+      "markerEnd": { "type": "arrowclosed" }
+    },
+    {
+      "id": "edge-4",
+      "source": "router-1",
+      "sourceHandle": "default",
+      "target": "agent-default",
+      "markerEnd": { "type": "arrowclosed" }
+    },
+    {
+      "id": "edge-5",
+      "source": "agent-toxic",
+      "target": "result-1",
+      "markerEnd": { "type": "arrowclosed" }
+    },
+    {
+      "id": "edge-6",
+      "source": "agent-safe",
+      "target": "result-1",
+      "markerEnd": { "type": "arrowclosed" }
+    },
+    {
+      "id": "edge-7",
+      "source": "agent-default",
+      "target": "result-1",
+      "markerEnd": { "type": "arrowclosed" }
+    }
+  ]
+}

@@ -6,8 +6,9 @@ import { PromptData } from "@/types/prompt";
 import { DocumentData } from "@/types/document";
 import { ChunkerData } from "@/types/chunker";
 import { RouterData } from "@/types/router";
+import { LoopData } from "@/types/loop";
 
-export type NodeData = AgentData | ToolData | OutputData | PromptData | DocumentData | ChunkerData | RouterData;
+export type NodeData = AgentData | ToolData | OutputData | PromptData | DocumentData | ChunkerData | RouterData | LoopData;
 
 export type TypedNode = {
   id: string;
