@@ -10,12 +10,13 @@ export interface RouterData {
   strategy: RouterStrategy;
   routes: Route[];
   defaultRoute?: string; // Route ID to use if no matches found
+  judgeModel?: string; // LLM model to use for llm-judge strategy (e.g., "openai/gpt-4o-mini")
   executedRoute?: string; // Which route was taken during execution
   executionState?: 'idle' | 'executing' | 'completed' | 'error';
   executionError?: string;
 }
 
-export type RouterStrategy = 'keyword' | 'sentiment';
+export type RouterStrategy = 'keyword' | 'sentiment' | 'llm-judge';
 
 export interface Route {
   id: string;
@@ -28,7 +29,8 @@ export interface Route {
  */
 export type RouteCondition =
   | KeywordCondition
-  | SentimentCondition;
+  | SentimentCondition
+  | LLMJudgeCondition;
 
 /**
  * Keyword Matching Condition
@@ -52,6 +54,16 @@ export interface SentimentCondition {
 }
 
 /**
+ * LLM Judge Condition
+ * Uses an LLM to classify input and route accordingly
+ */
+export interface LLMJudgeCondition {
+  type: 'llm-judge';
+  judgePrompt: string; // Instructions for the LLM judge
+  model?: string; // Optional model override (defaults to workflow default)
+}
+
+/**
  * Type guards for route conditions
  */
 export function isKeywordCondition(condition: RouteCondition): condition is KeywordCondition {
@@ -60,6 +72,10 @@ export function isKeywordCondition(condition: RouteCondition): condition is Keyw
 
 export function isSentimentCondition(condition: RouteCondition): condition is SentimentCondition {
   return condition.type === 'sentiment';
+}
+
+export function isLLMJudgeCondition(condition: RouteCondition): condition is LLMJudgeCondition {
+  return condition.type === 'llm-judge';
 }
 
 /**

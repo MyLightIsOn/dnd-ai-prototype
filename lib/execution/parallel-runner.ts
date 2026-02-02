@@ -301,8 +301,13 @@ async function executeNode(
 
       const input = dependencyOutputs.join('\n\n');
 
+      // Track LLM judge results for logging
+      let llmJudgeResult: { cost: number; tokens: number; decision: string } | undefined;
+
       // Evaluate routes
-      const selectedRouteId = await evaluateRoutes(input, routerData);
+      const selectedRouteId = await evaluateRoutes(input, routerData, (result) => {
+        llmJudgeResult = result;
+      });
 
       // Determine which route to use
       let executedRoute: string;
@@ -310,12 +315,26 @@ async function executeNode(
         // A route matched
         executedRoute = selectedRouteId;
         const selectedRoute = routerData.routes?.find(r => r.id === selectedRouteId);
-        setLogs(logs => logs.concat(`🔀 ${routerData.name || 'Router'}: Routed to "${selectedRoute?.label || 'Unknown'}"`));
+        let logMessage = `🔀 ${routerData.name || 'Router'}: Routed to "${selectedRoute?.label || 'Unknown'}"`;
+
+        // Add LLM judge cost info if available
+        if (llmJudgeResult) {
+          logMessage += `\n💰 LLM Judge Cost: $${llmJudgeResult.cost.toFixed(6)} | Tokens: ${llmJudgeResult.tokens} | Decision: "${llmJudgeResult.decision}"`;
+        }
+
+        setLogs(logs => logs.concat(logMessage));
         output = input; // Pass through input to selected route
       } else if (routerData.defaultRoute) {
         // No route matched, but default route is configured
         executedRoute = 'default';
-        setLogs(logs => logs.concat(`⚠️ ${routerData.name || 'Router'}: No routes matched, using default route`));
+        let logMessage = `⚠️ ${routerData.name || 'Router'}: No routes matched, using default route`;
+
+        // Add LLM judge cost info if available
+        if (llmJudgeResult) {
+          logMessage += `\n💰 LLM Judge Cost: $${llmJudgeResult.cost.toFixed(6)} | Tokens: ${llmJudgeResult.tokens}`;
+        }
+
+        setLogs(logs => logs.concat(logMessage));
         output = input;
       } else {
         // No route matched and no default route configured

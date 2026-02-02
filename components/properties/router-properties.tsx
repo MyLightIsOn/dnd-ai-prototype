@@ -1,8 +1,10 @@
 import React from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
-import type { RouterData, Route, KeywordCondition, SentimentCondition } from "@/types/router";
+import { Textarea } from "../ui/textarea";
+import type { RouterData, Route, KeywordCondition, SentimentCondition, LLMJudgeCondition } from "@/types/router";
 import { Plus, Trash2 } from "lucide-react";
+import { getAllModels } from "@/lib/providers";
 
 export function RouterProperties({
   data,
@@ -11,10 +13,18 @@ export function RouterProperties({
   data: RouterData;
   onChange: (patch: Partial<RouterData>) => void;
 }) {
+  const models = getAllModels();
+
   const addRoute = () => {
-    const condition: KeywordCondition | SentimentCondition = data.strategy === 'keyword'
-      ? { type: 'keyword', keywords: [], matchMode: 'any', caseSensitive: false }
-      : { type: 'sentiment', targetSentiment: 'positive', threshold: 0.5 };
+    let condition: KeywordCondition | SentimentCondition | LLMJudgeCondition;
+
+    if (data.strategy === 'keyword') {
+      condition = { type: 'keyword', keywords: [], matchMode: 'any', caseSensitive: false };
+    } else if (data.strategy === 'sentiment') {
+      condition = { type: 'sentiment', targetSentiment: 'positive', threshold: 0.5 };
+    } else {
+      condition = { type: 'llm-judge', judgePrompt: '' };
+    }
 
     const newRoute: Route = {
       id: crypto.randomUUID(),
@@ -59,6 +69,15 @@ export function RouterProperties({
     }
   };
 
+  const updateLLMJudgeCondition = (routeId: string, updates: Partial<LLMJudgeCondition>) => {
+    const route = data.routes?.find(r => r.id === routeId);
+    if (route && route.condition.type === 'llm-judge') {
+      updateRoute(routeId, {
+        condition: { ...route.condition, ...updates }
+      });
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Strategy Selector */}
@@ -68,7 +87,7 @@ export function RouterProperties({
           className="px-3 py-2 border rounded-md text-sm"
           value={data.strategy}
           onChange={(e) => {
-            const newStrategy = e.target.value as 'keyword' | 'sentiment';
+            const newStrategy = e.target.value as 'keyword' | 'sentiment' | 'llm-judge';
             onChange({
               strategy: newStrategy,
               // Reset routes when changing strategy
@@ -78,13 +97,38 @@ export function RouterProperties({
         >
           <option value="keyword">Keyword Matching</option>
           <option value="sentiment">Sentiment Analysis</option>
+          <option value="llm-judge">LLM Judge</option>
         </select>
         <div className="text-xs text-gray-500">
           {data.strategy === 'keyword'
             ? 'Route based on keyword presence in input'
-            : 'Route based on sentiment classification'}
+            : data.strategy === 'sentiment'
+            ? 'Route based on sentiment classification'
+            : 'Route based on LLM classification (requires API key)'}
         </div>
       </div>
+
+      {/* LLM Judge Model Selector */}
+      {data.strategy === 'llm-judge' && (
+        <div className="grid gap-2">
+          <label className="text-xs text-gray-600">Judge Model</label>
+          <select
+            className="px-3 py-2 border rounded-md text-sm"
+            value={data.judgeModel || ''}
+            onChange={(e) => onChange({ judgeModel: e.target.value })}
+          >
+            <option value="">Select a model...</option>
+            {models.map((model) => (
+              <option key={model.id} value={`${model.provider}/${model.id}`}>
+                {model.displayName}
+              </option>
+            ))}
+          </select>
+          <div className="text-xs text-gray-500">
+            The LLM model used to classify inputs for all routes
+          </div>
+        </div>
+      )}
 
       {/* Routes */}
       <div className="space-y-3">
@@ -183,6 +227,28 @@ export function RouterProperties({
                         <option value="negative">😞 Negative</option>
                         <option value="neutral">😐 Neutral</option>
                       </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* LLM Judge Condition */}
+                {route.condition.type === 'llm-judge' && (
+                  <div className="space-y-2">
+                    <div className="grid gap-2">
+                      <label className="text-xs text-gray-600">Judge Prompt</label>
+                      <Textarea
+                        placeholder={`Classify if this input is about "${route.label}". Respond with "${route.label}" if it matches, or "none" if it doesn't.`}
+                        value={route.condition.judgePrompt}
+                        onChange={(e) =>
+                          updateLLMJudgeCondition(route.id, {
+                            judgePrompt: e.target.value
+                          })
+                        }
+                        className="text-sm min-h-[80px]"
+                      />
+                      <div className="text-xs text-gray-500">
+                        Instructions for the LLM judge. The LLM will be asked to respond with "{route.label}" if the input matches this route.
+                      </div>
                     </div>
                   </div>
                 )}
