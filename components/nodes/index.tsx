@@ -4,6 +4,7 @@ import { Position, Handle } from "@xyflow/react";
 import type { AgentData, ToolData, OutputData, PromptData } from "@/types";
 import { DocumentNode } from "./document-node";
 import { ChunkerNode } from "./chunker-node";
+import { RouterNode } from "./router-node";
 
 function NodeChrome({
   title,
@@ -174,7 +175,7 @@ export const ResultNode: React.FC<NodeProps> = ({ data }) => {
       color="bg-slate-600"
       executionState={d.executionState}
     >
-      <div className="text-[11px] text-gray-700 whitespace-pre-wrap max-h-24 overflow-auto ">
+      <div className="text-[11px] text-gray-700 whitespace-pre-wrap max-h-24 overflow-auto max-w-[300px]">
         {d.preview || "Will show the final result."}
       </div>
     </NodeChrome>
@@ -204,4 +205,5 @@ export const nodeTypes: NodeTypes = {
   prompt: PromptNode,
   document: DocumentNode,
   chunker: ChunkerNode,
+  router: RouterNode,
 };
