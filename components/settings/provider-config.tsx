@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { getProvider } from '@/lib/providers';
-import { getApiKey } from '@/lib/storage/api-keys';
+import { getApiKey, isEnvKey } from '@/lib/storage/api-keys';
 import { CheckCircle2, AlertCircle, XCircle, Loader2 } from 'lucide-react';
 
 type ProviderName = 'openai' | 'anthropic' | 'google' | 'ollama';
@@ -31,6 +31,11 @@ const PROVIDER_PLACEHOLDERS: Record<ProviderName, string> = {
   ollama: 'http://localhost:11434',
 };
 
+function maskKey(key: string): string {
+  if (key.length <= 8) return '***';
+  return key.slice(0, 6) + '***';
+}
+
 export default function ProviderConfig({
   provider,
   apiKey,
@@ -40,6 +45,8 @@ export default function ProviderConfig({
     useState<ValidationStatus>('not-configured');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [modelCount, setModelCount] = useState<number>(0);
+
+  const fromEnv = isEnvKey(provider);
 
   // Load initial validation status on mount
   useEffect(() => {
@@ -143,10 +150,25 @@ export default function ProviderConfig({
 
   return (
     <div className="space-y-2 rounded-lg border p-4">
-      <div className="font-medium">{PROVIDER_LABELS[provider]}</div>
+      <div className="flex items-center gap-2">
+        <span className="font-medium">{PROVIDER_LABELS[provider]}</span>
+        {fromEnv && (
+          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+            From .env
+          </span>
+        )}
+      </div>
 
       <div className="flex gap-2">
-        {isOllama ? (
+        {fromEnv ? (
+          <Input
+            type="text"
+            value={maskKey(apiKey)}
+            disabled
+            readOnly
+            className="flex-1 font-mono"
+          />
+        ) : isOllama ? (
           <Input
             type="text"
             value="http://localhost:11434"
@@ -164,14 +186,16 @@ export default function ProviderConfig({
           />
         )}
 
-        <Button
-          onClick={handleTest}
-          disabled={validationStatus === 'testing' || (!isOllama && !apiKey.trim())}
-          variant="outline"
-          size="default"
-        >
-          {validationStatus === 'testing' ? 'Testing...' : 'Test'}
-        </Button>
+        {!fromEnv && (
+          <Button
+            onClick={handleTest}
+            disabled={validationStatus === 'testing' || (!isOllama && !apiKey.trim())}
+            variant="outline"
+            size="default"
+          >
+            {validationStatus === 'testing' ? 'Testing...' : 'Test'}
+          </Button>
+        )}
       </div>
 
       {renderStatusIndicator()}

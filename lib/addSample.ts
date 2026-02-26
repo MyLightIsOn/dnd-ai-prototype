@@ -212,17 +212,9 @@ export function addMultiAgentAnalysis(
   setEdges(edges);
 }
 
-// Legacy function for backward compatibility
-export function addSample(
-  setNodes: (nodes: TypedNode[]) => void,
-  setEdges: (edges: Edge[]) => void,
-) {
-  addDocumentSummarizer(setNodes, setEdges);
-}
-
 /**
- * UAT Sample 1: Keyword Router
- * Prompt → Router [keyword] → Weather Agent → Result  (or Travel Agent → Result)
+ * Sample 4: Keyword Router
+ * Prompt → Router [keyword] → Weather Agent or Travel Agent → Result
  * Demonstrates: keyword routing, edge filtering, conditional execution
  */
 export function addKeywordRouter(
@@ -328,9 +320,9 @@ export function addKeywordRouter(
 }
 
 /**
- * UAT Sample 2: LLM Judge Router
- * Prompt → Router [llm-judge] → Urgent Agent → Result  (or Standard Agent → Result)
- * Demonstrates: LLM-as-judge routing, AI-evaluated conditions, routing with live model
+ * Sample 5: LLM Judge Router
+ * Prompt → Router [llm-judge] → Urgent Agent or Standard Agent → Result
+ * Demonstrates: LLM-as-judge routing, AI-evaluated conditions
  */
 export function addLLMJudgeRouter(
   setNodes: (nodes: TypedNode[]) => void,
@@ -432,9 +424,9 @@ export function addLLMJudgeRouter(
 }
 
 /**
- * UAT Sample 3: Refine Loop
+ * Sample 6: Refine Loop
  * Prompt → Loop [3 iterations, keyword break] → Agent → back to Loop → Result
- * Demonstrates: iterative refinement, loop counter, break conditions, loop exit
+ * Demonstrates: iterative refinement, loop counter, break conditions
  */
 export function addRefineLoop(
   setNodes: (nodes: TypedNode[]) => void,
@@ -495,6 +487,14 @@ export function addRefineLoop(
     edge(refiner.id, loop.id),
     edge(loop.id, result.id, { sourceHandle: "exit" }),
   ]);
+}
+
+// Legacy function for backward compatibility
+export function addSample(
+  setNodes: (nodes: TypedNode[]) => void,
+  setEdges: (edges: Edge[]) => void,
+) {
+  addDocumentSummarizer(setNodes, setEdges);
 }
 
 /**

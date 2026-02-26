@@ -1,7 +1,7 @@
 import React from "react";
 import { topoSort } from "@/lib/topoSort";
 import type { Edge } from "@xyflow/react";
-import type { AgentData, ToolData, TypedNode, Id, ChunkerData, RouterData, LoopData } from "@/types";
+import type { AgentData, ToolData, TypedNode, Id, ChunkerData, RouterData, LoopData, PromptData } from "@/types";
 import type { DocumentData } from "@/types/document";
 import type { MemoryData } from "@/types/memory";
 import type { HumanReviewData, ReviewDecision } from "@/types/human-review";
@@ -28,7 +28,8 @@ import { AuditLog } from "./audit-log";
  */
 function getActiveEdges(
   allEdges: Edge[],
-  nodesById: Record<Id, TypedNode>
+  nodesById: Record<Id, TypedNode>,
+  loopExited?: Record<Id, boolean>
 ): Edge[] {
   return allEdges.filter(edge => {
     const sourceNode = nodesById[edge.source as Id];
@@ -68,20 +69,20 @@ function getActiveEdges(
 
     // Handle loop nodes
     if (sourceNode.type === 'loop') {
-      const loopData = sourceNode.data as LoopData;
-
       // For backward compatibility: if edge has no sourceHandle, keep it
       if (!edge.sourceHandle) {
         return true;
       }
 
-      // If loop has exited, only keep exit edge
-      if (loopData.executedExit) {
-        return edge.sourceHandle === 'exit';
-      }
+      // Use local loopExited map (authoritative) or fall back to stale node data
+      const hasExited = loopExited
+        ? !!loopExited[edge.source as Id]
+        : !!(sourceNode.data as LoopData).executedExit;
 
-      // If loop is continuing, only keep continue edge
-      return edge.sourceHandle === 'continue';
+      // If loop has exited, only keep exit edge; otherwise only keep continue edge
+      return hasExited
+        ? edge.sourceHandle === 'exit'
+        : edge.sourceHandle === 'continue';
     }
 
     // For all other node types, keep the edge
@@ -129,6 +130,8 @@ interface NodeExecutionContext {
   nodesById: Record<Id, TypedNode>;
   incomingEdgesByNode: Record<Id, Id[]>;
   nodeOutputs: Record<Id, string>;
+  loopIterations: Record<Id, number>;
+  loopExited: Record<Id, boolean>;
   setLogs: React.Dispatch<React.SetStateAction<string[]>>;
   setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>;
   executionControl?: React.MutableRefObject<ExecutionStatus>;
@@ -146,7 +149,7 @@ async function executeNode(
   nodeId: Id,
   context: NodeExecutionContext
 ): Promise<string> {
-  const { nodesById, incomingEdgesByNode, nodeOutputs, setLogs, setNodes, executionControl, workflowMemory, auditLog, setReviewRequest, reviewDecisionRef } = context;
+  const { nodesById, incomingEdgesByNode, nodeOutputs, loopIterations, loopExited, setLogs, setNodes, executionControl, workflowMemory, auditLog, setReviewRequest, reviewDecisionRef } = context;
   const node = nodesById[nodeId];
 
   // Set node to executing state
@@ -157,7 +160,12 @@ async function executeNode(
   let output = '';
 
   try {
-    if (node.type === "document") {
+    if (node.type === "prompt") {
+      // Prompt node: pass text to downstream nodes
+      const promptData = node.data as PromptData;
+      output = promptData.text || '';
+      setLogs(logs => logs.concat(`💬 ${promptData.name || 'Prompt'}: ${output.slice(0, 80)}${output.length > 80 ? '…' : ''}`));
+    } else if (node.type === "document") {
       // Document node: store content for downstream agents
       const docData = node.data as DocumentData;
       output = docData.content || '';
@@ -285,13 +293,9 @@ async function executeNode(
       const chunkerData = node.data as ChunkerData;
       const dependencyOutputs = incomingEdgesByNode[node.id]
         .map((depId) => nodeOutputs[depId])
-        .filter(Boolean);
+        .filter((v) => v != null);
 
-      if (dependencyOutputs.length === 0) {
-        throw new Error('No input document');
-      }
-
-      const parentContent = dependencyOutputs[0];
+      const parentContent = dependencyOutputs[0] ?? '';
       const chunks = chunkDocument(
         parentContent,
         chunkerData.strategy || 'fixed',
@@ -379,12 +383,13 @@ async function executeNode(
       const loopData = node.data as LoopData;
       const dependencyOutputs = incomingEdgesByNode[node.id]
         .map((depId) => nodeOutputs[depId])
-        .filter(Boolean);
+        .filter((v) => v != null);
 
       const input = dependencyOutputs.join('\n\n');
 
-      // Increment iteration counter
-      const newIteration = loopData.currentIteration + 1;
+      // Use local iteration counter (nodesById is a snapshot and goes stale during execution)
+      const newIteration = (loopIterations[nodeId] || 0) + 1;
+      loopIterations[nodeId] = newIteration;
 
       // Check if we've reached max iterations
       const maxIterations = loopData.maxIterations || 10;
@@ -396,6 +401,8 @@ async function executeNode(
 
       // Determine if loop should exit
       const executedExit = shouldBreak;
+      // Record in local map so getActiveEdges can use fresh state (nodesById is stale)
+      loopExited[nodeId] = executedExit;
 
       // Log iteration status
       if (executedExit) {
@@ -682,11 +689,46 @@ export async function runParallel(
     animated: false
   })));
 
+  // Strip loop back-edges before topo-sort. Loop nodes intentionally create cycles
+  // (body → loop) for iteration; the runner handles this itself. We find all nodes
+  // reachable from each loop node via its "continue" handle, then drop any edge that
+  // goes from those body nodes back to the loop node.
+  const edgesForSort = (() => {
+    const loopNodes = nodes.filter(n => n.type === 'loop');
+    if (loopNodes.length === 0) return edges;
+
+    const backEdgeIds = new Set<string>();
+    for (const loopNode of loopNodes) {
+      // BFS from loop via "continue" outgoing edges
+      const bodyNodes = new Set<string>();
+      const queue: string[] = [];
+      edges
+        .filter(e => e.source === loopNode.id && e.sourceHandle === 'continue')
+        .forEach(e => { bodyNodes.add(e.target as string); queue.push(e.target as string); });
+      while (queue.length > 0) {
+        const cur = queue.shift()!;
+        edges
+          .filter(e => e.source === cur && e.target !== loopNode.id)
+          .forEach(e => {
+            if (!bodyNodes.has(e.target as string)) {
+              bodyNodes.add(e.target as string);
+              queue.push(e.target as string);
+            }
+          });
+      }
+      // Any edge from a body node back to this loop node is a back-edge
+      edges
+        .filter(e => bodyNodes.has(e.source as string) && e.target === loopNode.id)
+        .forEach(e => backEdgeIds.add(e.id));
+    }
+    return backEdgeIds.size > 0 ? edges.filter(e => !backEdgeIds.has(e.id)) : edges;
+  })();
+
   // Compute topological ordering and detect cycles
-  const { order: topologicalOrder, hasCycle, cycles } = topoSort(nodes, edges);
+  const { order: topologicalOrder, hasCycle, cycles } = topoSort(nodes, edgesForSort);
 
   if (hasCycle) {
-    // Log cycle detection but continue execution
+    // Log remaining cycles (not expected after loop back-edge removal)
     const cycleNodeIds = Array.from(cycles);
     const cycleNames = cycleNodeIds
       .map(id => {
@@ -724,7 +766,7 @@ export async function runParallel(
   const nodeOutputs: Record<Id, string> = {};
 
   // Group nodes by dependency level
-  let levels = groupNodesByLevel(topologicalOrder, edges);
+  let levels = groupNodesByLevel(topologicalOrder, edgesForSort);
 
   setLogs((logs) => logs.concat(`🚀 Executing ${levels.length} level(s) with parallel nodes...`));
 
@@ -733,6 +775,12 @@ export async function runParallel(
 
   // Track which nodes have been executed to avoid re-execution
   const executedNodes = new Set<Id>();
+
+  // Track loop iteration counts separately to avoid relying on stale nodesById
+  const loopIterations: Record<Id, number> = {};
+
+  // Track whether each loop has exited (authoritative; nodesById goes stale during execution)
+  const loopExited: Record<Id, boolean> = {};
 
   // Track global iteration count to prevent infinite loops
   let globalIterationCount = 0;
@@ -800,6 +848,8 @@ export async function runParallel(
       nodesById,
       incomingEdgesByNode,
       nodeOutputs,
+      loopIterations,
+      loopExited,
       setLogs,
       setNodes,
       executionControl,
@@ -881,7 +931,7 @@ export async function runParallel(
     // If this level contained routers or loops, recalculate levels with filtered edges
     if (hasRouterInLevel || hasLoopInLevel) {
       // Get active edges based on router and loop decisions
-      const activeEdges = getActiveEdges(edges, nodesById);
+      const activeEdges = getActiveEdges(edges, nodesById, loopExited);
 
       // Build set of active edge IDs for quick lookup
       const activeEdgeIds = new Set(activeEdges.map(e => e.id));
@@ -953,16 +1003,12 @@ export async function runParallel(
         // Check if any loops in this level are continuing
         const continuingLoops = nodesToExecute.filter(nodeId => {
           const node = nodesById[nodeId];
-          if (node.type === 'loop') {
-            const loopData = node.data as LoopData;
-            return !loopData.executedExit;
-          }
-          return false;
+          if (node.type !== 'loop') return false;
+          // Use local loopExited map (authoritative — nodesById is stale)
+          return !loopExited[nodeId];
         });
 
         if (continuingLoops.length > 0) {
-          // For continuing loops, we need to re-add nodes in the loop body to execution
-          // Clear executedNodes for loop body nodes so they can execute again
           continuingLoops.forEach(loopNodeId => {
             // Find all nodes reachable from the continue handle
             const loopBodyNodes = new Set<Id>();
@@ -977,7 +1023,7 @@ export async function runParallel(
                 queue.push(targetId);
               });
 
-            // BFS to find all nodes in loop body (until we reach the loop node again)
+            // BFS to find all nodes in loop body (stop before the loop node itself)
             while (queue.length > 0) {
               const currentId = queue.shift()!;
               activeEdges
@@ -991,10 +1037,9 @@ export async function runParallel(
                 });
             }
 
-            // Clear executed status for loop body nodes
-            loopBodyNodes.forEach(nodeId => {
-              executedNodes.delete(nodeId);
-            });
+            // Clear loop body nodes AND the loop node itself so they re-execute
+            loopBodyNodes.forEach(nodeId => executedNodes.delete(nodeId));
+            executedNodes.delete(loopNodeId);
           });
         }
       }
@@ -1003,8 +1048,17 @@ export async function runParallel(
       const remainingNodes = topologicalOrder.filter(nodeId => !executedNodes.has(nodeId));
 
       if (remainingNodes.length > 0) {
+        // Exclude nodes that have dependencies in the graph but NO active incoming edges —
+        // these are waiting on a future loop exit or router decision and should not
+        // be scheduled as spurious root nodes.
+        const schedulableRemaining = remainingNodes.filter(nodeId => {
+          const hasAnyDep = edgesForSort.some(e => e.target === nodeId);
+          if (!hasAnyDep) return true; // True root node
+          return activeEdges.some(e => e.target === nodeId); // Has at least one active incoming edge
+        });
+
         // Recalculate levels for remaining nodes using filtered edges
-        const newLevels = groupNodesByLevel(remainingNodes, activeEdges);
+        const newLevels = groupNodesByLevel(schedulableRemaining, activeEdges);
 
         // Replace remaining levels with recalculated ones
         levels = [
