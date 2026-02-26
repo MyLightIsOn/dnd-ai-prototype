@@ -3,6 +3,7 @@ import { topoSort } from "@/lib/topoSort";
 import type { Edge } from "@xyflow/react";
 import type { AgentData, ToolData, TypedNode, Id, ChunkerData, RouterData, LoopData } from "@/types";
 import type { DocumentData } from "@/types/document";
+import type { MemoryData } from "@/types/memory";
 import { getProvider } from "@/lib/providers";
 import { getApiKey } from "@/lib/storage/api-keys";
 import type { Message } from "@/lib/providers/base";
@@ -10,6 +11,7 @@ import { chunkDocument } from "@/lib/document/chunker";
 import { groupNodesByLevel } from "./levels";
 import { evaluateRoutes } from "./route-evaluator";
 import { shouldBreakLoop } from "./loop-evaluator";
+import { MemoryManager, globalMemoryInstance } from "./memory-manager";
 
 /**
  * Filters edges based on router and loop execution decisions.
@@ -114,6 +116,7 @@ interface NodeExecutionContext {
   setLogs: React.Dispatch<React.SetStateAction<string[]>>;
   setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>;
   executionControl?: React.MutableRefObject<ExecutionStatus>;
+  workflowMemory: MemoryManager;
 }
 
 /**
@@ -124,7 +127,7 @@ async function executeNode(
   nodeId: Id,
   context: NodeExecutionContext
 ): Promise<string> {
-  const { nodesById, incomingEdgesByNode, nodeOutputs, setLogs, setNodes } = context;
+  const { nodesById, incomingEdgesByNode, nodeOutputs, setLogs, setNodes, workflowMemory } = context;
   const node = nodesById[nodeId];
 
   // Set node to executing state
@@ -407,6 +410,40 @@ async function executeNode(
 
       // Pass through input to next node
       output = input;
+    } else if (node.type === "memory") {
+      // Memory node - store inputs in MemoryManager
+      const memData = node.data as MemoryData;
+      const dependencyOutputs = incomingEdgesByNode[node.id]
+        .map((depId) => nodeOutputs[depId])
+        .filter(Boolean);
+
+      const input = dependencyOutputs.join('\n\n');
+
+      // Determine correct manager based on scope
+      const manager = memData.scope === 'global' ? globalMemoryInstance : workflowMemory;
+
+      // Try to parse input as JSON; store each key-value pair, otherwise store under node name
+      let storedCount = 0;
+      try {
+        const parsed = JSON.parse(input);
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          for (const [k, v] of Object.entries(parsed)) {
+            manager.set(k, v);
+            storedCount++;
+          }
+        } else {
+          manager.set(memData.name, input);
+          storedCount = 1;
+        }
+      } catch {
+        manager.set(memData.name, input);
+        storedCount = 1;
+      }
+
+      setLogs(logs => logs.concat(`🧠 Memory [${memData.name || 'Memory'}]: stored ${storedCount} key(s)`));
+
+      // Pass through input to downstream nodes
+      output = input;
     } else if (node.type === "result") {
       // Result node
       const incomingNodes = incomingEdgesByNode[node.id] || [];
@@ -470,7 +507,10 @@ export async function runParallel(
   executionControl?: React.MutableRefObject<ExecutionStatus>,
   errorRecoveryAction?: React.MutableRefObject<'retry' | 'skip' | 'abort' | null>,
   setCurrentError?: React.Dispatch<React.SetStateAction<{ nodeId: string; nodeName: string; message: string } | null>>,
-) {
+): Promise<{ memory: MemoryManager }> {
+  // Create a workflow-scoped MemoryManager for this execution run
+  const workflowMemory = new MemoryManager('workflow');
+
   // Clear previous logs
   setLogs([]);
 
@@ -569,7 +609,7 @@ export async function runParallel(
         ...n,
         data: { ...n.data, executionState: 'idle' as const }
       })));
-      return;
+      return { memory: workflowMemory };
     }
 
     // Skip nodes that have already been executed
@@ -586,7 +626,7 @@ export async function runParallel(
         ...n,
         data: { ...n.data, executionState: 'idle' as const }
       })));
-      return;
+      return { memory: workflowMemory };
     }
 
     // Check for pause
@@ -603,7 +643,7 @@ export async function runParallel(
           ...n,
           data: { ...n.data, executionState: 'idle' as const }
         })));
-        return;
+        return { memory: workflowMemory };
       }
 
       setLogs((logs) => logs.concat("▶️  Execution resumed."));
@@ -619,7 +659,8 @@ export async function runParallel(
       nodeOutputs,
       setLogs,
       setNodes,
-      executionControl
+      executionControl,
+      workflowMemory
     };
 
     // Execute all nodes in this level in parallel
@@ -681,7 +722,7 @@ export async function runParallel(
               ...n,
               data: { ...n.data, executionState: 'idle' as const }
             })));
-            return;
+            return { memory: workflowMemory };
           }
           // For skip or retry, continue (retry logic would need level re-execution)
           // For now, we skip failed nodes and continue
@@ -837,4 +878,6 @@ export async function runParallel(
   }
 
   setLogs((logs) => logs.concat("✅ Done."));
+
+  return { memory: workflowMemory };
 }
