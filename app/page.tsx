@@ -17,6 +17,7 @@ import { importJSON } from "@/lib/importJSON";
 import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis } from "@/lib/addSample";
 import { runParallel as runLib, type ExecutionStatus } from "@/lib/execution/parallel-runner";
 import { MemoryManager } from "@/lib/execution/memory-manager";
+import { AuditLog } from "@/lib/execution/audit-log";
 
 import type { AgentData, ToolData, OutputData, TypedNode, PromptData, DocumentData, ChunkerData, NodeData } from "@/types";
 
@@ -28,6 +29,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [executionStatus, setExecutionStatus] = useState<ExecutionStatus>('idle');
   const [workflowMemory, setWorkflowMemory] = useState<MemoryManager | null>(null);
+  const [auditLog, setAuditLog] = useState<AuditLog | null>(null);
   const executionControlRef = useRef<ExecutionStatus>('idle');
   const [currentError, setCurrentError] = useState<{
     nodeId: string;
@@ -102,6 +104,7 @@ export default function App() {
 
     const result = await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControlRef, errorRecoveryActionRef, setCurrentError, setReviewRequest, reviewDecisionRef);
     setWorkflowMemory(result.memory);
+    setAuditLog(result.auditLog);
 
     // Reset to idle after completion (unless already cancelled)
     const currentStatus = executionControlRef.current;

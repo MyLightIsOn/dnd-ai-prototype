@@ -14,6 +14,7 @@ import { evaluateRoutes } from "./route-evaluator";
 import { shouldBreakLoop } from "./loop-evaluator";
 import { MemoryManager, globalMemoryInstance } from "./memory-manager";
 import { evaluateApprovalRule, canDecideEarly } from "./approval-evaluator";
+import { AuditLog } from "./audit-log";
 
 /**
  * Filters edges based on router and loop execution decisions.
@@ -132,6 +133,7 @@ interface NodeExecutionContext {
   setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>;
   executionControl?: React.MutableRefObject<ExecutionStatus>;
   workflowMemory: MemoryManager;
+  auditLog: AuditLog;
   setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>;
   reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>;
 }
@@ -144,7 +146,7 @@ async function executeNode(
   nodeId: Id,
   context: NodeExecutionContext
 ): Promise<string> {
-  const { nodesById, incomingEdgesByNode, nodeOutputs, setLogs, setNodes, executionControl, workflowMemory, setReviewRequest, reviewDecisionRef } = context;
+  const { nodesById, incomingEdgesByNode, nodeOutputs, setLogs, setNodes, executionControl, workflowMemory, auditLog, setReviewRequest, reviewDecisionRef } = context;
   const node = nodesById[nodeId];
 
   // Set node to executing state
@@ -545,6 +547,23 @@ async function executeNode(
         }
       }
 
+      // Log the human review decision to the audit trail
+      auditLog.log({
+        nodeId: node.id,
+        nodeName: reviewData.name,
+        type: 'human-review',
+        decision: finalDecision,
+        beforeContent: input.slice(0, 2000),
+        afterContent: finalContent !== input ? finalContent.slice(0, 2000) : undefined,
+        reviewer: multi?.enabled
+          ? `Multiple (${multi.reviewerCount ?? 1} reviewer(s))`
+          : 'Reviewer',
+        metadata: {
+          reviewMode: reviewData.reviewMode,
+          multiReview: multi?.enabled ?? false,
+        },
+      });
+
       if (finalDecision === 'rejected') {
         throw new Error(`Content rejected by reviewer`);
       }
@@ -616,9 +635,12 @@ export async function runParallel(
   setCurrentError?: React.Dispatch<React.SetStateAction<{ nodeId: string; nodeName: string; message: string } | null>>,
   setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>,
   reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>,
-): Promise<{ memory: MemoryManager }> {
+): Promise<{ memory: MemoryManager; auditLog: AuditLog }> {
   // Create a workflow-scoped MemoryManager for this execution run
   const workflowMemory = new MemoryManager('workflow');
+
+  // Create a fresh AuditLog for this execution run
+  const auditLog = new AuditLog();
 
   // Clear previous logs
   setLogs([]);
@@ -718,7 +740,7 @@ export async function runParallel(
         ...n,
         data: { ...n.data, executionState: 'idle' as const }
       })));
-      return { memory: workflowMemory };
+      return { memory: workflowMemory, auditLog };
     }
 
     // Skip nodes that have already been executed
@@ -735,7 +757,7 @@ export async function runParallel(
         ...n,
         data: { ...n.data, executionState: 'idle' as const }
       })));
-      return { memory: workflowMemory };
+      return { memory: workflowMemory, auditLog };
     }
 
     // Check for pause
@@ -752,7 +774,7 @@ export async function runParallel(
           ...n,
           data: { ...n.data, executionState: 'idle' as const }
         })));
-        return { memory: workflowMemory };
+        return { memory: workflowMemory, auditLog };
       }
 
       setLogs((logs) => logs.concat("▶️  Execution resumed."));
@@ -770,6 +792,7 @@ export async function runParallel(
       setNodes,
       executionControl,
       workflowMemory,
+      auditLog,
       setReviewRequest,
       reviewDecisionRef,
     };
@@ -833,7 +856,7 @@ export async function runParallel(
               ...n,
               data: { ...n.data, executionState: 'idle' as const }
             })));
-            return { memory: workflowMemory };
+            return { memory: workflowMemory, auditLog };
           }
           // For skip or retry, continue (retry logic would need level re-execution)
           // For now, we skip failed nodes and continue
@@ -990,5 +1013,5 @@ export async function runParallel(
 
   setLogs((logs) => logs.concat("✅ Done."));
 
-  return { memory: workflowMemory };
+  return { memory: workflowMemory, auditLog };
 }
