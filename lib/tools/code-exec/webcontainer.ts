@@ -24,7 +24,6 @@ export const codeExecTool: Tool = {
   async execute(input: string, config: unknown): Promise<ToolResult> {
     const cfg = config as CodeExecConfig;
 
-    // Use config code, fallback to upstream input if empty
     const code = cfg.code?.trim() || input.trim();
     if (!code) {
       return { success: false, output: "", error: "No code to execute" };
@@ -35,27 +34,31 @@ export const codeExecTool: Tool = {
     try {
       const wc = await getWebContainer();
 
-      // Write the code file
+      // Mount/overwrite index.js
       await wc.mount({ "index.js": { file: { contents: code } } });
 
-      // Run it
       const process = await wc.spawn("node", ["index.js"]);
 
-      let stdout = "";
-
-      process.output.pipeTo(
+      // Collect stdout chunks
+      const chunks: string[] = [];
+      const collectStream = process.output.pipeTo(
         new WritableStream({
-          write(data) { stdout += data; },
+          write(data) { chunks.push(data); },
         })
       );
 
-      // Race against timeout
+      // Race process exit against timeout
       const exitCode = await Promise.race([
         process.exit,
         new Promise<number>((_, reject) =>
           setTimeout(() => reject(new Error(`Timeout after ${cfg.timeout ?? 10}s`)), timeoutMs)
         ),
       ]);
+
+      // Wait for stream to finish flushing after process exits
+      await collectStream.catch(() => {}); // ignore stream errors
+
+      const stdout = chunks.join("");
 
       if (exitCode !== 0) {
         return {
