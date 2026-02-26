@@ -13,7 +13,7 @@ import React, { useMemo, useState, useRef } from "react";
 
 import { exportJSON } from "@/lib/exportJSON";
 import { importJSON } from "@/lib/importJSON";
-import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis, addKeywordRouter, addLLMJudgeRouter, addRefineLoop, addWebSearchSample } from "@/lib/addSample";
+import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis, addKeywordRouter, addLLMJudgeRouter, addRefineLoop, addWebSearchSample, addCodeGenSample, addApiFetchSample, addDbReportSample, addResearchCodeSample } from "@/lib/addSample";
 import { runParallel as runLib, type ExecutionStatus } from "@/lib/execution/parallel-runner";
 
 import type { TypedNode, NodeData } from "@/types";
@@ -66,7 +66,7 @@ export default function App() {
     setSelectedId(null);
   };
 
-  const addSample = (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop' | 'web-search') => {
+  const addSample = (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop' | 'web-search' | 'code-gen' | 'api-fetch' | 'db-report' | 'research-code') => {
     switch (sampleType) {
       case 'summarizer':
         addDocumentSummarizer(setNodes, setEdges);
@@ -88,6 +88,18 @@ export default function App() {
         break;
       case 'web-search':
         addWebSearchSample(setNodes, setEdges);
+        break;
+      case 'code-gen':
+        addCodeGenSample(setNodes, setEdges);
+        break;
+      case 'api-fetch':
+        addApiFetchSample(setNodes, setEdges);
+        break;
+      case 'db-report':
+        addDbReportSample(setNodes, setEdges);
+        break;
+      case 'research-code':
+        addResearchCodeSample(setNodes, setEdges);
         break;
     }
   };
