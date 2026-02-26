@@ -1,7 +1,7 @@
 import React from "react";
 import { topoSort } from "@/lib/topoSort";
 import type { Edge } from "@xyflow/react";
-import type { AgentData, ToolData, TypedNode, Id, ChunkerData, RouterData } from "@/types";
+import type { AgentData, ToolData, TypedNode, Id, ChunkerData, RouterData, LoopData } from "@/types";
 import type { DocumentData } from "@/types/document";
 import { getProvider } from "@/lib/providers";
 import { getApiKey } from "@/lib/storage/api-keys";
@@ -9,6 +9,80 @@ import type { Message } from "@/lib/providers/base";
 import { chunkDocument } from "@/lib/document/chunker";
 import { groupNodesByLevel } from "./levels";
 import { evaluateRoutes } from "./route-evaluator";
+import { shouldBreakLoop } from "./loop-evaluator";
+
+/**
+ * Filters edges based on router and loop execution decisions.
+ * - For router nodes: only keeps edges where sourceHandle matches the selected route.
+ * - For loop nodes: only keeps continue or exit edge based on executedExit flag.
+ * - For other nodes: keeps all edges.
+ *
+ * @param allEdges - All edges in the workflow
+ * @param nodesById - Map of node IDs to node objects
+ * @returns Filtered array of active edges
+ */
+function getActiveEdges(
+  allEdges: Edge[],
+  nodesById: Record<Id, TypedNode>
+): Edge[] {
+  return allEdges.filter(edge => {
+    const sourceNode = nodesById[edge.source as Id];
+
+    // If source node doesn't exist, keep the edge
+    if (!sourceNode) {
+      return true;
+    }
+
+    // Handle router nodes
+    if (sourceNode.type === 'router') {
+      const routerData = sourceNode.data as RouterData;
+
+      // If router hasn't executed yet, keep the edge (will be filtered later)
+      if (!routerData.executedRoute) {
+        return true;
+      }
+
+      // For backward compatibility: if edge has no sourceHandle, keep it
+      if (!edge.sourceHandle) {
+        return true;
+      }
+
+      // Keep edge only if sourceHandle matches the executed route ID
+      const isMatch = edge.sourceHandle === routerData.executedRoute;
+
+      // Add warning if mismatch (helps debug)
+      if (!isMatch && edge.sourceHandle && routerData.executedRoute) {
+        console.warn(
+          `Router ${edge.source}: edge sourceHandle "${edge.sourceHandle}" ` +
+          `doesn't match executed route "${routerData.executedRoute}"`
+        );
+      }
+
+      return isMatch;
+    }
+
+    // Handle loop nodes
+    if (sourceNode.type === 'loop') {
+      const loopData = sourceNode.data as LoopData;
+
+      // For backward compatibility: if edge has no sourceHandle, keep it
+      if (!edge.sourceHandle) {
+        return true;
+      }
+
+      // If loop has exited, only keep exit edge
+      if (loopData.executedExit) {
+        return edge.sourceHandle === 'exit';
+      }
+
+      // If loop is continuing, only keep continue edge
+      return edge.sourceHandle === 'continue';
+    }
+
+    // For all other node types, keep the edge
+    return true;
+  });
+}
 
 /**
  * Build the message array for an LLM completion request.
@@ -227,28 +301,112 @@ async function executeNode(
 
       const input = dependencyOutputs.join('\n\n');
 
-      // Evaluate routes
-      const selectedRouteId = await evaluateRoutes(input, routerData);
+      // Track LLM judge results for logging
+      let llmJudgeResult: { cost: number; tokens: number; decision: string } | undefined;
 
-      // Store selected route
+      // Evaluate routes
+      const selectedRouteId = await evaluateRoutes(input, routerData, (result) => {
+        llmJudgeResult = result;
+      });
+
+      // Determine which route to use
+      let executedRoute: string;
+      if (selectedRouteId) {
+        // A route matched
+        executedRoute = selectedRouteId;
+        const selectedRoute = routerData.routes?.find(r => r.id === selectedRouteId);
+        let logMessage = `🔀 ${routerData.name || 'Router'}: Routed to "${selectedRoute?.label || 'Unknown'}"`;
+
+        // Add LLM judge cost info if available
+        if (llmJudgeResult) {
+          logMessage += `\n💰 LLM Judge Cost: $${llmJudgeResult.cost.toFixed(6)} | Tokens: ${llmJudgeResult.tokens} | Decision: "${llmJudgeResult.decision}"`;
+        }
+
+        setLogs(logs => logs.concat(logMessage));
+        output = input; // Pass through input to selected route
+      } else if (routerData.defaultRoute) {
+        // No route matched, but default route is configured
+        executedRoute = 'default';
+        let logMessage = `⚠️ ${routerData.name || 'Router'}: No routes matched, using default route`;
+
+        // Add LLM judge cost info if available
+        if (llmJudgeResult) {
+          logMessage += `\n💰 LLM Judge Cost: $${llmJudgeResult.cost.toFixed(6)} | Tokens: ${llmJudgeResult.tokens}`;
+        }
+
+        setLogs(logs => logs.concat(logMessage));
+        output = input;
+      } else {
+        // No route matched and no default route configured
+        throw new Error(
+          `Router "${routerData.name || 'Router'}": No routes matched and no default route configured. ` +
+          `Either add a default route or adjust route conditions to match the input.`
+        );
+      }
+
+      // Store selected route in node data
       setNodes((currentNodes) =>
         currentNodes.map((mapped) =>
           mapped.id === node.id
-            ? { ...mapped, data: { ...mapped.data, executedRoute: selectedRouteId || routerData.defaultRoute } }
+            ? { ...mapped, data: { ...mapped.data, executedRoute } }
+            : mapped,
+        ),
+      );
+    } else if (node.type === "loop") {
+      // Loop node - manage iteration counting and break conditions
+      const loopData = node.data as LoopData;
+      const dependencyOutputs = incomingEdgesByNode[node.id]
+        .map((depId) => nodeOutputs[depId])
+        .filter(Boolean);
+
+      const input = dependencyOutputs.join('\n\n');
+
+      // Increment iteration counter
+      const newIteration = loopData.currentIteration + 1;
+
+      // Check if we've reached max iterations
+      const maxIterations = loopData.maxIterations || 10;
+      const reachedMaxIterations = newIteration >= maxIterations;
+
+      // Check break condition
+      const shouldBreak = reachedMaxIterations ||
+        await shouldBreakLoop(loopData.breakCondition, input, newIteration);
+
+      // Determine if loop should exit
+      const executedExit = shouldBreak;
+
+      // Log iteration status
+      if (executedExit) {
+        const reason = reachedMaxIterations
+          ? `reached max iterations (${maxIterations})`
+          : 'break condition met';
+        setLogs(logs => logs.concat(
+          `🔁 ${loopData.name || 'Loop'}: Iteration ${newIteration} - Exiting (${reason})`
+        ));
+      } else {
+        setLogs(logs => logs.concat(
+          `🔁 ${loopData.name || 'Loop'}: Iteration ${newIteration} - Continuing`
+        ));
+      }
+
+      // Update loop node data with new iteration and exit status
+      setNodes((currentNodes) =>
+        currentNodes.map((mapped) =>
+          mapped.id === node.id
+            ? {
+                ...mapped,
+                data: {
+                  ...mapped.data,
+                  currentIteration: newIteration,
+                  executedExit
+                }
+              }
             : mapped,
         ),
       );
 
-      const selectedRoute = routerData.routes?.find(r => r.id === selectedRouteId);
-      if (selectedRoute) {
-        setLogs(logs => logs.concat(`🔀 ${routerData.name || 'Router'}: Routed to "${selectedRoute.label}"`));
-        output = input; // Pass through input to selected route
-      } else if (routerData.defaultRoute) {
-        setLogs(logs => logs.concat(`🔀 ${routerData.name || 'Router'}: Using default route (no matches)`));
-        output = input;
-      } else {
-        throw new Error('No matching route and no default route configured');
-      }
+      // Pass through input to next node
+      output = input;
     } else if (node.type === "result") {
       // Result node
       const incomingNodes = incomingEdgesByNode[node.id] || [];
@@ -308,6 +466,7 @@ export async function runParallel(
   edges: Edge[],
   setLogs: React.Dispatch<React.SetStateAction<string[]>>,
   setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>,
+  setEdges: React.Dispatch<React.SetStateAction<Edge[]>>,
   executionControl?: React.MutableRefObject<ExecutionStatus>,
   errorRecoveryAction?: React.MutableRefObject<'retry' | 'skip' | 'abort' | null>,
   setCurrentError?: React.Dispatch<React.SetStateAction<{ nodeId: string; nodeName: string; message: string } | null>>,
@@ -315,11 +474,49 @@ export async function runParallel(
   // Clear previous logs
   setLogs([]);
 
-  // Compute topological ordering and check for cycles
-  const { order: topologicalOrder, hasCycle } = topoSort(nodes, edges);
+  // Reset all nodes to idle state and clear loop counters
+  setNodes(nodes => nodes.map(node => {
+    if (node.type === 'loop') {
+      const loopData = node.data as LoopData;
+      return {
+        ...node,
+        data: {
+          ...loopData,
+          currentIteration: 0,
+          executedExit: false,
+          executionState: 'idle' as const,
+          executionError: undefined
+        }
+      };
+    }
+    return node;
+  }));
+
+  // Reset all edges to default style at start of run
+  setEdges(edges => edges.map(edge => ({
+    ...edge,
+    style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 1 },
+    animated: false
+  })));
+
+  // Compute topological ordering and detect cycles
+  const { order: topologicalOrder, hasCycle, cycles } = topoSort(nodes, edges);
+
   if (hasCycle) {
-    setLogs((logs) => logs.concat("❌ Graph has a cycle. Break loops to run."));
-    return;
+    // Log cycle detection but continue execution
+    const cycleNodeIds = Array.from(cycles);
+    const cycleNames = cycleNodeIds
+      .map(id => {
+        const node = nodes.find(n => n.id === id);
+        const nodeData = node?.data as { name?: string } | undefined;
+        return nodeData?.name || node?.type || id;
+      })
+      .join(', ');
+
+    setLogs((logs) => logs.concat(
+      `⚠️ Cycles detected in graph (nodes: ${cycleNames}). ` +
+      `Execution will proceed with acyclic nodes.`
+    ));
   }
 
   // Build lookup maps
@@ -344,15 +541,43 @@ export async function runParallel(
   const nodeOutputs: Record<Id, string> = {};
 
   // Group nodes by dependency level
-  const levels = groupNodesByLevel(topologicalOrder, edges);
+  let levels = groupNodesByLevel(topologicalOrder, edges);
 
   setLogs((logs) => logs.concat(`🚀 Executing ${levels.length} level(s) with parallel nodes...`));
 
   const STEP_DELAY_MS = 200;
+  const GLOBAL_ITERATION_LIMIT = 1000;
+
+  // Track which nodes have been executed to avoid re-execution
+  const executedNodes = new Set<Id>();
+
+  // Track global iteration count to prevent infinite loops
+  let globalIterationCount = 0;
 
   // Execute each level sequentially
   for (let levelIndex = 0; levelIndex < levels.length; levelIndex++) {
     const level = levels[levelIndex];
+
+    // Check global iteration limit
+    globalIterationCount++;
+    if (globalIterationCount > GLOBAL_ITERATION_LIMIT) {
+      setLogs((logs) => logs.concat(
+        `🚨 Global iteration limit exceeded (${GLOBAL_ITERATION_LIMIT}). ` +
+        `This likely indicates an infinite loop. Aborting execution.`
+      ));
+      setNodes(nodes => nodes.map(n => ({
+        ...n,
+        data: { ...n.data, executionState: 'idle' as const }
+      })));
+      return;
+    }
+
+    // Skip nodes that have already been executed
+    const nodesToExecute = level.filter(nodeId => !executedNodes.has(nodeId));
+
+    if (nodesToExecute.length === 0) {
+      continue;
+    }
 
     // Check for cancellation
     if (executionControl?.current === 'cancelled') {
@@ -384,8 +609,8 @@ export async function runParallel(
       setLogs((logs) => logs.concat("▶️  Execution resumed."));
     }
 
-    if (level.length > 1) {
-      setLogs((logs) => logs.concat(`⚡ Level ${levelIndex + 1}: Executing ${level.length} nodes in parallel...`));
+    if (nodesToExecute.length > 1) {
+      setLogs((logs) => logs.concat(`⚡ Level ${levelIndex + 1}: Executing ${nodesToExecute.length} nodes in parallel...`));
     }
 
     const context: NodeExecutionContext = {
@@ -399,13 +624,28 @@ export async function runParallel(
 
     // Execute all nodes in this level in parallel
     const results = await Promise.allSettled(
-      level.map(nodeId => executeNode(nodeId, context))
+      nodesToExecute.map(nodeId => executeNode(nodeId, context))
     );
 
+    // Track if this level contains any router or loop nodes
+    let hasRouterInLevel = false;
+    let hasLoopInLevel = false;
+
     // Process results and handle errors
-    for (let i = 0; i < level.length; i++) {
-      const nodeId = level[i];
+    for (let i = 0; i < nodesToExecute.length; i++) {
+      const nodeId = nodesToExecute[i];
       const result = results[i];
+
+      // Mark node as executed
+      executedNodes.add(nodeId);
+
+      // Check if this node is a router or loop
+      const node = nodesById[nodeId];
+      if (node.type === 'router') {
+        hasRouterInLevel = true;
+      } else if (node.type === 'loop') {
+        hasLoopInLevel = true;
+      }
 
       if (result.status === 'fulfilled') {
         // Node succeeded, store output
@@ -450,6 +690,150 @@ export async function runParallel(
     }
 
     await new Promise((resolve) => setTimeout(resolve, STEP_DELAY_MS));
+
+    // If this level contained routers or loops, recalculate levels with filtered edges
+    if (hasRouterInLevel || hasLoopInLevel) {
+      // Get active edges based on router and loop decisions
+      const activeEdges = getActiveEdges(edges, nodesById);
+
+      // Build set of active edge IDs for quick lookup
+      const activeEdgeIds = new Set(activeEdges.map(e => e.id));
+
+      // Update edge styles: green/bold/animated for selected paths, gray/thin for non-selected
+      setEdges(currentEdges => currentEdges.map(edge => {
+        if (activeEdgeIds.has(edge.id)) {
+          // Selected path: green, bold, animated, full opacity
+          return {
+            ...edge,
+            style: { stroke: '#22c55e', strokeWidth: 2, opacity: 1 },
+            animated: true
+          };
+        } else {
+          // Check if this edge comes from a router or loop that has executed
+          const sourceNode = nodesById[edge.source as Id];
+          if (sourceNode) {
+            if (sourceNode.type === 'router') {
+              const routerData = sourceNode.data as RouterData;
+              if (routerData.executedRoute) {
+                // Non-selected path from executed router: gray, thin, dimmed, not animated
+                return {
+                  ...edge,
+                  style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
+                  animated: false
+                };
+              }
+            } else if (sourceNode.type === 'loop') {
+              const loopData = sourceNode.data as LoopData;
+              // Dim the non-selected loop edge
+              if (edge.sourceHandle === 'continue' && loopData.executedExit) {
+                // Continue edge when loop exited: dimmed
+                return {
+                  ...edge,
+                  style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
+                  animated: false
+                };
+              } else if (edge.sourceHandle === 'exit' && !loopData.executedExit) {
+                // Exit edge when loop continuing: dimmed
+                return {
+                  ...edge,
+                  style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
+                  animated: false
+                };
+              }
+            }
+          }
+          // Edge not from an executed router/loop: keep current style
+          return edge;
+        }
+      }));
+
+      // Update incoming edges map with filtered edges
+      // Reset for all nodes first
+      for (const nodeId in incomingEdgesByNode) {
+        incomingEdgesByNode[nodeId] = [];
+      }
+      // Rebuild with active edges only
+      activeEdges.forEach((edge) => {
+        const targetId = edge.target as Id;
+        const sourceId = edge.source as Id;
+        if (incomingEdgesByNode[targetId]) {
+          incomingEdgesByNode[targetId].push(sourceId);
+        }
+      });
+
+      // For loops that are continuing, need to add loop body nodes back to execution
+      if (hasLoopInLevel) {
+        // Check if any loops in this level are continuing
+        const continuingLoops = nodesToExecute.filter(nodeId => {
+          const node = nodesById[nodeId];
+          if (node.type === 'loop') {
+            const loopData = node.data as LoopData;
+            return !loopData.executedExit;
+          }
+          return false;
+        });
+
+        if (continuingLoops.length > 0) {
+          // For continuing loops, we need to re-add nodes in the loop body to execution
+          // Clear executedNodes for loop body nodes so they can execute again
+          continuingLoops.forEach(loopNodeId => {
+            // Find all nodes reachable from the continue handle
+            const loopBodyNodes = new Set<Id>();
+            const queue: Id[] = [];
+
+            // Start with nodes directly connected to continue handle
+            activeEdges
+              .filter(edge => edge.source === loopNodeId && edge.sourceHandle === 'continue')
+              .forEach(edge => {
+                const targetId = edge.target as Id;
+                loopBodyNodes.add(targetId);
+                queue.push(targetId);
+              });
+
+            // BFS to find all nodes in loop body (until we reach the loop node again)
+            while (queue.length > 0) {
+              const currentId = queue.shift()!;
+              activeEdges
+                .filter(edge => edge.source === currentId && edge.target !== loopNodeId)
+                .forEach(edge => {
+                  const targetId = edge.target as Id;
+                  if (!loopBodyNodes.has(targetId)) {
+                    loopBodyNodes.add(targetId);
+                    queue.push(targetId);
+                  }
+                });
+            }
+
+            // Clear executed status for loop body nodes
+            loopBodyNodes.forEach(nodeId => {
+              executedNodes.delete(nodeId);
+            });
+          });
+        }
+      }
+
+      // Get remaining nodes (not yet executed)
+      const remainingNodes = topologicalOrder.filter(nodeId => !executedNodes.has(nodeId));
+
+      if (remainingNodes.length > 0) {
+        // Recalculate levels for remaining nodes using filtered edges
+        const newLevels = groupNodesByLevel(remainingNodes, activeEdges);
+
+        // Replace remaining levels with recalculated ones
+        levels = [
+          ...levels.slice(0, levelIndex + 1),
+          ...newLevels
+        ];
+
+        if (hasRouterInLevel && hasLoopInLevel) {
+          setLogs((logs) => logs.concat(`🔀 Recalculated execution path based on router and loop decisions`));
+        } else if (hasRouterInLevel) {
+          setLogs((logs) => logs.concat(`🔀 Recalculated execution path based on router decisions`));
+        } else {
+          setLogs((logs) => logs.concat(`🔁 Recalculated execution path based on loop decisions`));
+        }
+      }
+    }
   }
 
   setLogs((logs) => logs.concat("✅ Done."));

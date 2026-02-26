@@ -5,6 +5,7 @@ import type { AgentData, ToolData, OutputData, PromptData } from "@/types";
 import { DocumentNode } from "./document-node";
 import { ChunkerNode } from "./chunker-node";
 import { RouterNode } from "./router-node";
+import { LoopNode } from "./loop-node";
 
 function NodeChrome({
   title,
@@ -206,4 +207,5 @@ export const nodeTypes: NodeTypes = {
   document: DocumentNode,
   chunker: ChunkerNode,
   router: RouterNode,
+  loop: LoopNode,
 };

@@ -10,12 +10,13 @@ export interface RouterData {
   strategy: RouterStrategy;
   routes: Route[];
   defaultRoute?: string; // Route ID to use if no matches found
+  judgeModel?: string; // LLM model to use for llm-judge strategy (e.g., "openai/gpt-4o-mini")
   executedRoute?: string; // Which route was taken during execution
   executionState?: 'idle' | 'executing' | 'completed' | 'error';
   executionError?: string;
 }
 
-export type RouterStrategy = 'keyword' | 'sentiment';
+export type RouterStrategy = 'keyword' | 'sentiment' | 'llm-judge' | 'json-field';
 
 export interface Route {
   id: string;
@@ -28,7 +29,9 @@ export interface Route {
  */
 export type RouteCondition =
   | KeywordCondition
-  | SentimentCondition;
+  | SentimentCondition
+  | LLMJudgeCondition
+  | JSONFieldCondition;
 
 /**
  * Keyword Matching Condition
@@ -52,6 +55,27 @@ export interface SentimentCondition {
 }
 
 /**
+ * LLM Judge Condition
+ * Uses an LLM to classify input and route accordingly
+ */
+export interface LLMJudgeCondition {
+  type: 'llm-judge';
+  judgePrompt: string; // Instructions for the LLM judge
+  model?: string; // Optional model override (defaults to workflow default)
+}
+
+/**
+ * JSON Field Condition
+ * Extracts a field from JSON and compares it to a value
+ */
+export interface JSONFieldCondition {
+  type: 'json-field';
+  field: string; // JSON field path (e.g., "status", "user.name")
+  operator: 'equals' | 'contains' | 'gt' | 'lt'; // Comparison operator
+  value: string; // Value to compare against
+}
+
+/**
  * Type guards for route conditions
  */
 export function isKeywordCondition(condition: RouteCondition): condition is KeywordCondition {
@@ -60,6 +84,14 @@ export function isKeywordCondition(condition: RouteCondition): condition is Keyw
 
 export function isSentimentCondition(condition: RouteCondition): condition is SentimentCondition {
   return condition.type === 'sentiment';
+}
+
+export function isLLMJudgeCondition(condition: RouteCondition): condition is LLMJudgeCondition {
+  return condition.type === 'llm-judge';
+}
+
+export function isJSONFieldCondition(condition: RouteCondition): condition is JSONFieldCondition {
+  return condition.type === 'json-field';
 }
 
 /**

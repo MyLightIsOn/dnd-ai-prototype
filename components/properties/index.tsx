@@ -2,11 +2,13 @@ import React, { useState } from "react";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import type { AgentData, ToolData, OutputData, PromptData, DocumentData, ChunkerData, RouterData, NodeData } from "@/types";
+import type { LoopData } from "@/types/loop";
 import type { TypedNode } from "@/types";
 import { getAllModels } from "@/lib/providers";
 import { DocumentProperties } from "./document-properties";
 import { ChunkerProperties } from "./chunker-properties";
 import { RouterProperties } from "./router-properties";
+import { LoopProperties } from "./loop-properties";
 
 function PropertiesPanel({
   selected,
@@ -120,6 +122,12 @@ function PropertiesPanel({
       {type === "router" && (
         <RouterProperties
           data={data as RouterData}
+          onChange={onChange}
+        />
+      )}
+      {type === "loop" && (
+        <LoopProperties
+          data={data as LoopData}
           onChange={onChange}
         />
       )}
