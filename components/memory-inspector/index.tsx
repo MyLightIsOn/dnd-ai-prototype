@@ -27,7 +27,7 @@ function getType(value: unknown): string {
   return typeof value;
 }
 
-export default function MemoryInspector({
+export function MemoryInspector({
   workflowMemory,
   isExecuting,
 }: MemoryInspectorProps) {
@@ -256,8 +256,8 @@ export default function MemoryInspector({
           </div>
         ) : (
           <div className="divide-y divide-gray-800">
-            {filteredHistory.map((entry, index) => (
-              <div key={index} className="px-3 py-2 hover:bg-gray-800/50">
+            {filteredHistory.map((entry) => (
+              <div key={`${entry.timestamp}-${entry.key}`} className="px-3 py-2 hover:bg-gray-800/50">
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="text-gray-500">
                     {new Date(entry.timestamp).toLocaleTimeString()}
