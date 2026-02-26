@@ -4,6 +4,7 @@ import type { Edge } from "@xyflow/react";
 import type { AgentData, ToolData, TypedNode, Id, ChunkerData, RouterData, LoopData } from "@/types";
 import type { DocumentData } from "@/types/document";
 import type { MemoryData } from "@/types/memory";
+import type { HumanReviewData, ReviewDecision } from "@/types/human-review";
 import { getProvider } from "@/lib/providers";
 import { getApiKey } from "@/lib/storage/api-keys";
 import type { Message } from "@/lib/providers/base";
@@ -12,6 +13,7 @@ import { groupNodesByLevel } from "./levels";
 import { evaluateRoutes } from "./route-evaluator";
 import { shouldBreakLoop } from "./loop-evaluator";
 import { MemoryManager, globalMemoryInstance } from "./memory-manager";
+import { evaluateApprovalRule, canDecideEarly } from "./approval-evaluator";
 
 /**
  * Filters edges based on router and loop execution decisions.
@@ -109,6 +111,19 @@ function buildMessages(agentData: AgentData, inputs: string[]): Message[] {
 
 export type ExecutionStatus = 'idle' | 'running' | 'paused' | 'cancelled';
 
+type ReviewRequest = {
+  reviewerLabel: string;
+  nodeName: string;
+  instructions?: string;
+  content: string;
+  mode: 'approve-reject' | 'edit-and-approve';
+};
+
+type ReviewDecisionResult = {
+  decision: 'approved' | 'rejected';
+  editedContent?: string;
+};
+
 interface NodeExecutionContext {
   nodesById: Record<Id, TypedNode>;
   incomingEdgesByNode: Record<Id, Id[]>;
@@ -117,6 +132,8 @@ interface NodeExecutionContext {
   setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>;
   executionControl?: React.MutableRefObject<ExecutionStatus>;
   workflowMemory: MemoryManager;
+  setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>;
+  reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>;
 }
 
 /**
@@ -127,7 +144,7 @@ async function executeNode(
   nodeId: Id,
   context: NodeExecutionContext
 ): Promise<string> {
-  const { nodesById, incomingEdgesByNode, nodeOutputs, setLogs, setNodes, workflowMemory } = context;
+  const { nodesById, incomingEdgesByNode, nodeOutputs, setLogs, setNodes, executionControl, workflowMemory, setReviewRequest, reviewDecisionRef } = context;
   const node = nodesById[nodeId];
 
   // Set node to executing state
@@ -444,6 +461,96 @@ async function executeNode(
 
       // Pass through input to downstream nodes
       output = input;
+    } else if (node.type === "human-review") {
+      const reviewData = node.data as HumanReviewData;
+      const multi = reviewData.multiReview;
+      const dependencyOutputs = incomingEdgesByNode[node.id]
+        .map((depId) => nodeOutputs[depId])
+        .filter(Boolean);
+      const input = dependencyOutputs.join('\n\n');
+      let finalContent = input;
+      let finalDecision: 'approved' | 'rejected' = 'approved';
+
+      if (multi?.enabled) {
+        const decisions: ReviewDecision[] = [];
+
+        for (let i = 0; i < multi.reviewerCount; i++) {
+          if (reviewDecisionRef) reviewDecisionRef.current = null;
+          if (setReviewRequest) {
+            setReviewRequest({
+              reviewerLabel: `Reviewer ${i + 1}`,
+              nodeName: reviewData.name,
+              instructions: reviewData.instructions,
+              content: finalContent,
+              mode: reviewData.reviewMode,
+            });
+          }
+
+          // Poll for decision (same pattern as error recovery)
+          while (reviewDecisionRef && reviewDecisionRef.current === null) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            // Check if execution was cancelled
+            if (executionControl?.current === 'cancelled') break;
+          }
+
+          if (executionControl?.current === 'cancelled') break;
+
+          const { decision, editedContent } = reviewDecisionRef!.current!;
+          decisions.push({ reviewer: `Reviewer ${i + 1}`, decision, timestamp: Date.now() });
+          if (editedContent) finalContent = editedContent;
+
+          if (canDecideEarly(decisions, multi.approvalRule, multi.reviewerCount)) break;
+        }
+
+        if (executionControl?.current !== 'cancelled') {
+          finalDecision = evaluateApprovalRule(decisions, multi.approvalRule);
+        }
+
+        // Update node with decisions
+        setNodes((current) =>
+          current.map((n) =>
+            n.id === node.id
+              ? { ...n, data: { ...n.data, multiReview: { ...multi, decisions }, lastDecision: finalDecision } }
+              : n,
+          ),
+        );
+      } else {
+        // Single reviewer
+        if (reviewDecisionRef) reviewDecisionRef.current = null;
+        if (setReviewRequest) {
+          setReviewRequest({
+            reviewerLabel: 'Reviewer',
+            nodeName: reviewData.name,
+            instructions: reviewData.instructions,
+            content: input,
+            mode: reviewData.reviewMode,
+          });
+        }
+
+        while (reviewDecisionRef && reviewDecisionRef.current === null) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          if (executionControl?.current === 'cancelled') break;
+        }
+
+        if (executionControl?.current !== 'cancelled') {
+          const { decision, editedContent } = reviewDecisionRef!.current!;
+          if (editedContent) finalContent = editedContent;
+          finalDecision = decision;
+
+          setNodes((current) =>
+            current.map((n) =>
+              n.id === node.id ? { ...n, data: { ...n.data, lastDecision: finalDecision } } : n,
+            ),
+          );
+        }
+      }
+
+      if (finalDecision === 'rejected') {
+        throw new Error(`Content rejected by reviewer`);
+      }
+
+      output = finalContent;
+      setLogs((logs) => logs.concat(`👤 ${reviewData.name || 'Human Review'}: ${finalDecision}`));
     } else if (node.type === "result") {
       // Result node
       const incomingNodes = incomingEdgesByNode[node.id] || [];
@@ -507,6 +614,8 @@ export async function runParallel(
   executionControl?: React.MutableRefObject<ExecutionStatus>,
   errorRecoveryAction?: React.MutableRefObject<'retry' | 'skip' | 'abort' | null>,
   setCurrentError?: React.Dispatch<React.SetStateAction<{ nodeId: string; nodeName: string; message: string } | null>>,
+  setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>,
+  reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>,
 ): Promise<{ memory: MemoryManager }> {
   // Create a workflow-scoped MemoryManager for this execution run
   const workflowMemory = new MemoryManager('workflow');
@@ -660,7 +769,9 @@ export async function runParallel(
       setLogs,
       setNodes,
       executionControl,
-      workflowMemory
+      workflowMemory,
+      setReviewRequest,
+      reviewDecisionRef,
     };
 
     // Execute all nodes in this level in parallel

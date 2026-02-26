@@ -7,6 +7,7 @@ import PropertiesPanel from "@/components/properties";
 import Console from "@/components/console";
 import SettingsModal from "@/components/settings";
 import { ErrorDialog } from "@/components/error-dialog";
+import { HumanReviewModal } from "@/components/human-review-modal";
 import { MemoryInspector } from "@/components/memory-inspector";
 import { Settings } from "lucide-react";
 import React, { useMemo, useState, useRef } from "react";
@@ -34,6 +35,17 @@ export default function App() {
     message: string;
   } | null>(null);
   const errorRecoveryActionRef = useRef<'retry' | 'skip' | 'abort' | null>(null);
+  const [reviewRequest, setReviewRequest] = useState<{
+    reviewerLabel: string;
+    nodeName: string;
+    instructions?: string;
+    content: string;
+    mode: 'approve-reject' | 'edit-and-approve';
+  } | null>(null);
+  const reviewDecisionRef = useRef<{
+    decision: 'approved' | 'rejected';
+    editedContent?: string;
+  } | null>(null);
 
   const selected = useMemo(
     () => nodes.find((n) => n.id === selectedId),
@@ -88,7 +100,7 @@ export default function App() {
     executionControlRef.current = 'running';
     errorRecoveryActionRef.current = null;
 
-    const result = await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControlRef, errorRecoveryActionRef, setCurrentError);
+    const result = await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControlRef, errorRecoveryActionRef, setCurrentError, setReviewRequest, reviewDecisionRef);
     setWorkflowMemory(result.memory);
 
     // Reset to idle after completion (unless already cancelled)
@@ -210,6 +222,21 @@ export default function App() {
           onSkip={handleErrorSkip}
           onAbort={handleErrorAbort}
         />
+
+        {reviewRequest && (
+          <HumanReviewModal
+            open={true}
+            reviewerLabel={reviewRequest.reviewerLabel}
+            nodeName={reviewRequest.nodeName}
+            instructions={reviewRequest.instructions}
+            content={reviewRequest.content}
+            mode={reviewRequest.mode}
+            onDecision={(decision, editedContent) => {
+              reviewDecisionRef.current = { decision, editedContent };
+              setReviewRequest(null);
+            }}
+          />
+        )}
       </ReactFlowProvider>
     </div>
   );
