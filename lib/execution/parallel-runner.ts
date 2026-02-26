@@ -461,6 +461,16 @@ async function executeNode(
 
       setLogs(logs => logs.concat(`🧠 Memory [${memData.name || 'Memory'}]: stored ${storedCount} key(s)`));
 
+      // Update node's keys field to reflect what was actually stored
+      const storedKeys = Object.keys(manager.getAll());
+      setNodes((current) =>
+        current.map((n) =>
+          n.id === node.id
+            ? { ...n, data: { ...n.data, keys: storedKeys } }
+            : n,
+        ),
+      );
+
       // Pass through input to downstream nodes
       output = input;
     } else if (node.type === "human-review") {
@@ -534,7 +544,7 @@ async function executeNode(
           if (executionControl?.current === 'cancelled') break;
         }
 
-        if (executionControl?.current !== 'cancelled') {
+        if (executionControl?.current !== 'cancelled' && reviewDecisionRef?.current !== null) {
           const { decision, editedContent } = reviewDecisionRef!.current!;
           if (editedContent) finalContent = editedContent;
           finalDecision = decision;
@@ -547,22 +557,24 @@ async function executeNode(
         }
       }
 
-      // Log the human review decision to the audit trail
-      auditLog.log({
-        nodeId: node.id,
-        nodeName: reviewData.name,
-        type: 'human-review',
-        decision: finalDecision,
-        beforeContent: input.slice(0, 2000),
-        afterContent: finalContent !== input ? finalContent.slice(0, 2000) : undefined,
-        reviewer: multi?.enabled
-          ? `Multiple (${multi.reviewerCount ?? 1} reviewer(s))`
-          : 'Reviewer',
-        metadata: {
-          reviewMode: reviewData.reviewMode,
-          multiReview: multi?.enabled ?? false,
-        },
-      });
+      // Log the human review decision to the audit trail (only if not cancelled)
+      if (executionControl?.current !== 'cancelled') {
+        auditLog.log({
+          nodeId: node.id,
+          nodeName: reviewData.name,
+          type: 'human-review',
+          decision: finalDecision,
+          beforeContent: input.slice(0, 2000),
+          afterContent: finalContent !== input ? finalContent.slice(0, 2000) : undefined,
+          reviewer: multi?.enabled
+            ? `Multiple (${multi.reviewerCount ?? 1} reviewer(s))`
+            : 'Reviewer',
+          metadata: {
+            reviewMode: reviewData.reviewMode,
+            multiReview: multi?.enabled ?? false,
+          },
+        });
+      }
 
       if (finalDecision === 'rejected') {
         throw new Error(`Content rejected by reviewer`);

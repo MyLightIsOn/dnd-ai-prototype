@@ -129,6 +129,7 @@ export default function App() {
   const cancel = () => {
     setExecutionStatus('cancelled');
     executionControlRef.current = 'cancelled';
+    setReviewRequest(null);
 
     // Reset to idle after a brief moment
     setTimeout(() => {
