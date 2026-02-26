@@ -343,15 +343,15 @@ function evaluateJSONFieldCondition(
  * Extract nested value from object using dot notation
  * Example: getNestedValue({user: {name: "Alice"}}, "user.name") returns "Alice"
  */
-function getNestedValue(obj: any, path: string): any {
+function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
   const parts = path.split('.');
-  let current = obj;
+  let current: unknown = obj;
 
   for (const part of parts) {
     if (current === null || current === undefined) {
       return undefined;
     }
-    current = current[part];
+    current = (current as Record<string, unknown>)[part];
   }
 
   return current;
@@ -361,7 +361,7 @@ function getNestedValue(obj: any, path: string): any {
  * Apply comparison operator
  */
 function applyOperator(
-  fieldValue: any,
+  fieldValue: unknown,
   operator: 'equals' | 'contains' | 'gt' | 'lt',
   compareValue: string
 ): boolean {
