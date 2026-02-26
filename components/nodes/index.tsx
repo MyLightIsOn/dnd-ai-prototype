@@ -143,6 +143,20 @@ export const AgentNode: React.FC<NodeProps> = ({ data }) => {
             {d.streaming && <span>stream</span>}
           </div>
         ) : null}
+        {(d.memoryRead && d.memoryRead.length > 0 || d.memoryWrite) && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {d.memoryRead?.map((key) => (
+              <span key={key} className="text-[10px] bg-purple-900/50 text-purple-300 rounded px-1">
+                📖 {key}
+              </span>
+            ))}
+            {d.memoryWrite && (
+              <span className="text-[10px] bg-pink-900/50 text-pink-300 rounded px-1">
+                💾 {d.memoryWrite}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </NodeChrome>
   );

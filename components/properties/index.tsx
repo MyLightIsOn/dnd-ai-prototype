@@ -298,6 +298,43 @@ function AgentProperties({
           </div>
         )}
       </div>
+
+      {/* Memory Configuration */}
+      <div className="border-t pt-3 space-y-3">
+        <div className="text-xs font-medium text-gray-700">Memory</div>
+
+        {/* Memory Read Keys */}
+        <div className="grid gap-2">
+          <label className="text-xs text-gray-600">Read Keys (comma-separated)</label>
+          <Input
+            placeholder="key1, key2"
+            value={(data.memoryRead ?? []).join(', ')}
+            onChange={(e) => {
+              const keys = e.target.value
+                .split(',')
+                .map((k) => k.trim())
+                .filter((k) => k.length > 0);
+              onChange({ memoryRead: keys });
+            }}
+          />
+          <div className="text-[10px] text-gray-500">
+            Keys to read from memory before execution
+          </div>
+        </div>
+
+        {/* Memory Write Key */}
+        <div className="grid gap-2">
+          <label className="text-xs text-gray-600">Write Key</label>
+          <Input
+            placeholder="result_key"
+            value={data.memoryWrite ?? ''}
+            onChange={(e) => onChange({ memoryWrite: e.target.value || undefined })}
+          />
+          <div className="text-[10px] text-gray-500">
+            Key to write this agent&apos;s output into memory
+          </div>
+        </div>
+      </div>
     </>
   );
 }
