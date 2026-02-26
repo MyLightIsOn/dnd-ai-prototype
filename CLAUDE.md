@@ -315,7 +315,7 @@ The app uses `@xyflow/react` (v12.x) for the visual canvas:
 ### Security & Storage
 - **Plain text API keys**: Keys stored unencrypted in localStorage
 - **No user authentication**: Anyone with browser access can use stored keys
-- **No audit trail**: Execution history not persisted
+- **Audit trail is session-scoped**: The AuditLog captures events for the current session only; it is not persisted across page reloads (export to JSON before closing the tab to retain history)
 
 ### Provider Limitations
 - **Ollama**: Requires local installation, models must be pulled manually
@@ -393,14 +393,23 @@ Key features:
 - Error recovery (retry, skip, abort)
 - Visual execution state indicators
 
-### Phase 2A - Planned
-Core orchestration features including:
-- Parallel execution (execute independent nodes concurrently)
-- Router node (conditional branching based on keywords or sentiment)
-- Memory system (workflow-scoped state management)
-- Human-in-the-loop (review and approval nodes)
+### Phase 2A - Complete ✅
+Core orchestration features. Key features:
+- Parallel execution (independent nodes execute concurrently)
+- Router node (conditional branching based on keywords, sentiment, or LLM-as-Judge)
+- JSON-field routing support
 
-See `docs/implementation-plans/phase-2a-core-orchestration.md` for full plan.
+### Phase 2B - Complete ✅
+Advanced router and loop features. Key features:
+- LLM-as-Judge routing (agent-evaluated conditional branching)
+- JSON-field routing (route based on structured output fields)
+- Loop / iteration node support
+
+### Phase 2C - Complete ✅
+Memory, human oversight, and audit trail. Key features:
+- **Memory system**: `MemoryManager` class with global and workflow-scoped namespaces; Memory node type for read/write operations; Memory Inspector panel in the properties sidebar; Memory visualization overlay on the canvas
+- **Human Review node**: Single and multi-reviewer support; approval rules (1-of-N, all-must-approve, M-of-N); edit-and-approve mode allowing reviewers to modify content before passing it downstream
+- **Audit Trail**: `AuditLog` class capturing every node execution event; Audit viewer UI with filtering and search; JSON export of the full audit log
 
 ### Future Phases
 - Phase 3: Tool integrations (web search, RAG, HTTP calls)
