@@ -635,6 +635,65 @@ export function addContentReview(
 }
 
 /**
+ * Sample 7: Web Search Pipeline
+ * Prompt → Web Search Tool → Summarizer Agent → Result
+ * Demonstrates: web search tool, live agent summarization
+ */
+export function addWebSearchSample(
+  setNodes: (nodes: TypedNode[]) => void,
+  setEdges: (edges: Edge[]) => void,
+) {
+  const prompt: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "prompt",
+    position: { x: 50, y: 220 },
+    data: {
+      name: "Search Topic",
+      text: "latest advances in quantum computing 2025",
+    },
+  } as TypedNode;
+
+  const webSearch: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "tool",
+    position: { x: 300, y: 220 },
+    data: {
+      name: "Web Search",
+      kind: "web-search",
+      config: { maxResults: 5 },
+    },
+  } as TypedNode;
+
+  const summarizer: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "agent",
+    position: { x: 580, y: 220 },
+    data: {
+      name: "Summarizer",
+      model: "openai/gpt-4o-mini",
+      prompt: "Summarize the following search results into a concise 3-paragraph report:\n\n{{input}}",
+      mode: "live",
+      streaming: true,
+      temperature: 0.4,
+    },
+  } as TypedNode;
+
+  const result: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "result",
+    position: { x: 880, y: 220 },
+    data: { name: "Research Report", preview: "" },
+  } as TypedNode;
+
+  setNodes([prompt, webSearch, summarizer, result]);
+  setEdges([
+    edge(prompt.id, webSearch.id),
+    edge(webSearch.id, summarizer.id),
+    edge(summarizer.id, result.id),
+  ]);
+}
+
+/**
  * UAT Sample 6: Multi-Reviewer Approval
  * Prompt → Agent → Human Review [3 reviewers, 2-of-3] → Result
  * Demonstrates: multi-reviewer workflow, approval rules, audit trail with multiple decisions

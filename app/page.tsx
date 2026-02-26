@@ -13,7 +13,7 @@ import React, { useMemo, useState, useRef } from "react";
 
 import { exportJSON } from "@/lib/exportJSON";
 import { importJSON } from "@/lib/importJSON";
-import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis, addKeywordRouter, addLLMJudgeRouter, addRefineLoop } from "@/lib/addSample";
+import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis, addKeywordRouter, addLLMJudgeRouter, addRefineLoop, addWebSearchSample } from "@/lib/addSample";
 import { runParallel as runLib, type ExecutionStatus } from "@/lib/execution/parallel-runner";
 
 import type { AgentData, ToolData, OutputData, TypedNode, PromptData, DocumentData, ChunkerData, NodeData } from "@/types";
@@ -66,7 +66,7 @@ export default function App() {
     setSelectedId(null);
   };
 
-  const addSample = (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop') => {
+  const addSample = (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop' | 'web-search') => {
     switch (sampleType) {
       case 'summarizer':
         addDocumentSummarizer(setNodes, setEdges);
@@ -85,6 +85,9 @@ export default function App() {
         break;
       case 'refine-loop':
         addRefineLoop(setNodes, setEdges);
+        break;
+      case 'web-search':
+        addWebSearchSample(setNodes, setEdges);
         break;
     }
   };

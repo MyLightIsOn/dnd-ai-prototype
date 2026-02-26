@@ -23,7 +23,7 @@ function ToolBar({
   onClear: () => void;
   onExport: () => void;
   onImport: React.ChangeEventHandler<HTMLInputElement>;
-  onAddSample: (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop') => void;
+  onAddSample: (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop' | 'web-search') => void;
   onSettings: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -154,10 +154,20 @@ function ToolBar({
                 onAddSample('refine-loop');
                 setShowSampleMenu(false);
               }}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t last:rounded-b-lg"
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
             >
               <div className="font-medium">Refine Loop</div>
               <div className="text-xs text-gray-500">Iterative refinement with break condition</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('web-search');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t last:rounded-b-lg"
+            >
+              <div className="font-medium">Web Search Pipeline</div>
+              <div className="text-xs text-gray-500">Search → Summarize → Report</div>
             </button>
           </div>
         )}
