@@ -63,6 +63,15 @@ function Pallette() {
           currentIteration: 0
         }}
       />
+      <PaletteItem
+        type="memory"
+        label="Memory"
+        meta={{
+          name: "Memory",
+          scope: "workflow",
+          keys: [],
+        }}
+      />
       <PaletteItem type="result" label="Result" meta={{ name: "Result" }} />
 
       <div className="pt-2 text-[11px] text-gray-500">

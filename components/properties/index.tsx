@@ -3,12 +3,14 @@ import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import type { AgentData, ToolData, OutputData, PromptData, DocumentData, ChunkerData, RouterData, NodeData } from "@/types";
 import type { LoopData } from "@/types/loop";
+import type { MemoryData } from "@/types/memory";
 import type { TypedNode } from "@/types";
 import { getAllModels } from "@/lib/providers";
 import { DocumentProperties } from "./document-properties";
 import { ChunkerProperties } from "./chunker-properties";
 import { RouterProperties } from "./router-properties";
 import { LoopProperties } from "./loop-properties";
+import { MemoryProperties } from "./memory-properties";
 
 function PropertiesPanel({
   selected,
@@ -128,6 +130,12 @@ function PropertiesPanel({
       {type === "loop" && (
         <LoopProperties
           data={data as LoopData}
+          onChange={onChange}
+        />
+      )}
+      {type === "memory" && (
+        <MemoryProperties
+          data={data as MemoryData}
           onChange={onChange}
         />
       )}
