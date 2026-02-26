@@ -7,6 +7,7 @@ import PropertiesPanel from "@/components/properties";
 import Console from "@/components/console";
 import SettingsModal from "@/components/settings";
 import { ErrorDialog } from "@/components/error-dialog";
+import { MemoryInspector } from "@/components/memory-inspector";
 import { Settings } from "lucide-react";
 import React, { useMemo, useState, useRef } from "react";
 
@@ -14,6 +15,7 @@ import { exportJSON } from "@/lib/exportJSON";
 import { importJSON } from "@/lib/importJSON";
 import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis } from "@/lib/addSample";
 import { runParallel as runLib, type ExecutionStatus } from "@/lib/execution/parallel-runner";
+import { MemoryManager } from "@/lib/execution/memory-manager";
 
 import type { AgentData, ToolData, OutputData, TypedNode, PromptData, DocumentData, ChunkerData, NodeData } from "@/types";
 
@@ -24,6 +26,7 @@ export default function App() {
   const [logs, setLogs] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [executionStatus, setExecutionStatus] = useState<ExecutionStatus>('idle');
+  const [workflowMemory, setWorkflowMemory] = useState<MemoryManager | null>(null);
   const executionControlRef = useRef<ExecutionStatus>('idle');
   const [currentError, setCurrentError] = useState<{
     nodeId: string;
@@ -85,7 +88,8 @@ export default function App() {
     executionControlRef.current = 'running';
     errorRecoveryActionRef.current = null;
 
-    await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControlRef, errorRecoveryActionRef, setCurrentError);
+    const result = await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControlRef, errorRecoveryActionRef, setCurrentError);
+    setWorkflowMemory(result.memory);
 
     // Reset to idle after completion (unless already cancelled)
     const currentStatus = executionControlRef.current;
@@ -169,14 +173,22 @@ export default function App() {
             />
           </div>
 
-          <div className="row-span-2 bg-white border rounded-2xl p-3 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="text-xs uppercase tracking-wide text-gray-500">
-                Properties
+          <div className="row-span-2 flex flex-col gap-3 min-h-0">
+            <div className="bg-white border rounded-2xl p-3 space-y-3 flex-1 min-h-0 overflow-auto">
+              <div className="flex items-center justify-between">
+                <div className="text-xs uppercase tracking-wide text-gray-500">
+                  Properties
+                </div>
+                <Settings size={16} />
               </div>
-              <Settings size={16} />
+              <PropertiesPanel selected={selected} onChange={updateSelected} />
             </div>
-            <PropertiesPanel selected={selected} onChange={updateSelected} />
+            <div className="h-64 shrink-0">
+              <MemoryInspector
+                workflowMemory={workflowMemory}
+                isExecuting={executionStatus === 'running'}
+              />
+            </div>
           </div>
 
           <div className="col-span-3">
