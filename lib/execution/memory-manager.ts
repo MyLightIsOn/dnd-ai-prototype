@@ -8,6 +8,10 @@ export interface MemoryChange {
 
 export class MemoryManager {
   private scope: 'workflow' | 'global';
+  // Both maps are retained so a single MemoryManager instance can serve either
+  // scope without re-instantiation. The active store is selected by getStore().
+  // This lets callers (e.g. globalMemoryInstance) share one class while keeping
+  // workflow-scoped and global-scoped data isolated.
   private workflowMemory: Map<string, unknown>;
   private globalMemory: Map<string, unknown>;
   private history: MemoryChange[];
@@ -54,6 +58,7 @@ export class MemoryManager {
 
   delete(key: string): void {
     const store = this.getStore();
+    if (!store.has(key)) return; // skip no-ops: avoid phantom history entries
     const oldValue = store.get(key);
     store.delete(key);
 
@@ -70,12 +75,7 @@ export class MemoryManager {
   }
 
   getAll(): Record<string, unknown> {
-    const store = this.getStore();
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of store.entries()) {
-      result[key] = value;
-    }
-    return result;
+    return Object.fromEntries(this.getStore());
   }
 
   getHistory(): MemoryChange[] {
@@ -97,7 +97,7 @@ export class MemoryManager {
   }
 
   clear(): void {
-    this.workflowMemory.clear();
+    this.getStore().clear();
     this.history = [];
   }
 
@@ -109,6 +109,10 @@ export class MemoryManager {
 
   getScope(): 'workflow' | 'global' {
     return this.scope;
+  }
+
+  dispose(): void {
+    this.listeners = [];
   }
 }
 
