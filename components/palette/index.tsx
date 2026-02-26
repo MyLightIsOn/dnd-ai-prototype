@@ -25,8 +25,8 @@ function Pallette() {
         label="Tool"
         meta={{
           name: "Tool",
-          kind: "http",
-          config: { endpoint: "https://api.example.com" },
+          kind: "web-search",
+          config: { maxResults: 5 },
         }}
       />
       <PaletteItem
