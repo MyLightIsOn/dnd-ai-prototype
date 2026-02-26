@@ -47,13 +47,16 @@ export const codeExecTool: Tool = {
         })
       );
 
+      // Create timeout that also kills the process
+      const timeoutPromise = new Promise<number>((_, reject) =>
+        setTimeout(() => {
+          process.kill();
+          reject(new Error(`Timeout after ${cfg.timeout ?? 10}s`));
+        }, timeoutMs)
+      );
+
       // Race process exit against timeout
-      const exitCode = await Promise.race([
-        process.exit,
-        new Promise<number>((_, reject) =>
-          setTimeout(() => reject(new Error(`Timeout after ${cfg.timeout ?? 10}s`)), timeoutMs)
-        ),
-      ]);
+      const exitCode = await Promise.race([process.exit, timeoutPromise]);
 
       // Wait for stream to finish flushing after process exits
       await collectStream.catch(() => {}); // ignore stream errors

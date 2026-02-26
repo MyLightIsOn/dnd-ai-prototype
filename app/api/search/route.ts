@@ -19,8 +19,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "query is required" }, { status: 400 });
   }
 
+  // Build effective query with domain filters applied as site: operators
+  let effectiveQuery = query;
+  if (body.includeDomains?.trim()) {
+    const includes = body.includeDomains.split(',').map((d: string) => d.trim()).filter(Boolean);
+    effectiveQuery += ' ' + includes.map((d: string) => `site:${d}`).join(' OR ');
+  }
+  if (body.excludeDomains?.trim()) {
+    const excludes = body.excludeDomains.split(',').map((d: string) => d.trim()).filter(Boolean);
+    effectiveQuery += ' ' + excludes.map((d: string) => `-site:${d}`).join(' ');
+  }
+
   const params = new URLSearchParams({
-    q: query,
+    q: effectiveQuery,
     count: String(Math.min(Math.max(maxResults, 1), 10)),
   });
 

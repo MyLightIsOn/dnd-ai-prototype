@@ -23,7 +23,7 @@ export function createSampleGraph(): {
     data: {
       name: "WebFetch",
       kind: "http",
-      config: { endpoint: "https://example.com" },
+      config: { method: "GET", url: "https://httpbin.org/get", headers: [] },
     },
   } as TypedNode;
   const a2: TypedNode = {
