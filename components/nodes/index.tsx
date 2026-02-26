@@ -6,6 +6,7 @@ import { DocumentNode } from "./document-node";
 import { ChunkerNode } from "./chunker-node";
 import { RouterNode } from "./router-node";
 import { LoopNode } from "./loop-node";
+import { MemoryNode } from "./memory-node";
 
 function NodeChrome({
   title,
@@ -208,4 +209,5 @@ export const nodeTypes: NodeTypes = {
   chunker: ChunkerNode,
   router: RouterNode,
   loop: LoopNode,
+  memory: MemoryNode,
 };
