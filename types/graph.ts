@@ -8,8 +8,9 @@ import { ChunkerData } from "@/types/chunker";
 import { RouterData } from "@/types/router";
 import { LoopData } from "@/types/loop";
 import { MemoryData } from "@/types/memory";
+import { HumanReviewData } from "@/types/human-review";
 
-export type NodeData = AgentData | ToolData | OutputData | PromptData | DocumentData | ChunkerData | RouterData | LoopData | MemoryData;
+export type NodeData = AgentData | ToolData | OutputData | PromptData | DocumentData | ChunkerData | RouterData | LoopData | MemoryData | HumanReviewData;
 
 export type TypedNode = {
   id: string;

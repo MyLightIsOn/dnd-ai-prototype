@@ -7,6 +7,7 @@ import { ChunkerNode } from "./chunker-node";
 import { RouterNode } from "./router-node";
 import { LoopNode } from "./loop-node";
 import { MemoryNode } from "./memory-node";
+import { HumanReviewNode } from "./human-review-node";
 
 function NodeChrome({
   title,
@@ -224,4 +225,5 @@ export const nodeTypes: NodeTypes = {
   router: RouterNode,
   loop: LoopNode,
   memory: MemoryNode,
+  'human-review': HumanReviewNode,
 };
