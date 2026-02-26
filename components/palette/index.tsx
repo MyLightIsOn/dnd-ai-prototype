@@ -72,6 +72,15 @@ function Pallette() {
           keys: [],
         }}
       />
+      <PaletteItem
+        type="human-review"
+        label="Human Review"
+        meta={{
+          name: "Human Review",
+          reviewMode: "approve-reject",
+          instructions: "",
+        }}
+      />
       <PaletteItem type="result" label="Result" meta={{ name: "Result" }} />
 
       <div className="pt-2 text-[11px] text-gray-500">
