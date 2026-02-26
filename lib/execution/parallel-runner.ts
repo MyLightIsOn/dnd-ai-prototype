@@ -3,6 +3,8 @@ import { topoSort } from "@/lib/topoSort";
 import type { Edge } from "@xyflow/react";
 import type { AgentData, ToolData, TypedNode, Id, ChunkerData, RouterData, LoopData } from "@/types";
 import type { DocumentData } from "@/types/document";
+import type { MemoryData } from "@/types/memory";
+import type { HumanReviewData, ReviewDecision } from "@/types/human-review";
 import { getProvider } from "@/lib/providers";
 import { getApiKey } from "@/lib/storage/api-keys";
 import type { Message } from "@/lib/providers/base";
@@ -10,6 +12,9 @@ import { chunkDocument } from "@/lib/document/chunker";
 import { groupNodesByLevel } from "./levels";
 import { evaluateRoutes } from "./route-evaluator";
 import { shouldBreakLoop } from "./loop-evaluator";
+import { MemoryManager, globalMemoryInstance } from "./memory-manager";
+import { evaluateApprovalRule, canDecideEarly } from "./approval-evaluator";
+import { AuditLog } from "./audit-log";
 
 /**
  * Filters edges based on router and loop execution decisions.
@@ -107,6 +112,19 @@ function buildMessages(agentData: AgentData, inputs: string[]): Message[] {
 
 export type ExecutionStatus = 'idle' | 'running' | 'paused' | 'cancelled';
 
+type ReviewRequest = {
+  reviewerLabel: string;
+  nodeName: string;
+  instructions?: string;
+  content: string;
+  mode: 'approve-reject' | 'edit-and-approve';
+};
+
+type ReviewDecisionResult = {
+  decision: 'approved' | 'rejected';
+  editedContent?: string;
+};
+
 interface NodeExecutionContext {
   nodesById: Record<Id, TypedNode>;
   incomingEdgesByNode: Record<Id, Id[]>;
@@ -114,6 +132,10 @@ interface NodeExecutionContext {
   setLogs: React.Dispatch<React.SetStateAction<string[]>>;
   setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>;
   executionControl?: React.MutableRefObject<ExecutionStatus>;
+  workflowMemory: MemoryManager;
+  auditLog: AuditLog;
+  setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>;
+  reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>;
 }
 
 /**
@@ -124,7 +146,7 @@ async function executeNode(
   nodeId: Id,
   context: NodeExecutionContext
 ): Promise<string> {
-  const { nodesById, incomingEdgesByNode, nodeOutputs, setLogs, setNodes } = context;
+  const { nodesById, incomingEdgesByNode, nodeOutputs, setLogs, setNodes, executionControl, workflowMemory, auditLog, setReviewRequest, reviewDecisionRef } = context;
   const node = nodesById[nodeId];
 
   // Set node to executing state
@@ -407,6 +429,159 @@ async function executeNode(
 
       // Pass through input to next node
       output = input;
+    } else if (node.type === "memory") {
+      // Memory node - store inputs in MemoryManager
+      const memData = node.data as MemoryData;
+      const dependencyOutputs = incomingEdgesByNode[node.id]
+        .map((depId) => nodeOutputs[depId])
+        .filter(Boolean);
+
+      const input = dependencyOutputs.join('\n\n');
+
+      // Determine correct manager based on scope
+      const manager = memData.scope === 'global' ? globalMemoryInstance : workflowMemory;
+
+      // Try to parse input as JSON; store each key-value pair, otherwise store under node name
+      let storedCount = 0;
+      try {
+        const parsed = JSON.parse(input);
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          for (const [k, v] of Object.entries(parsed)) {
+            manager.set(k, v);
+            storedCount++;
+          }
+        } else {
+          manager.set(memData.name, input);
+          storedCount = 1;
+        }
+      } catch {
+        manager.set(memData.name, input);
+        storedCount = 1;
+      }
+
+      setLogs(logs => logs.concat(`🧠 Memory [${memData.name || 'Memory'}]: stored ${storedCount} key(s)`));
+
+      // Update node's keys field to reflect what was actually stored
+      const storedKeys = Object.keys(manager.getAll());
+      setNodes((current) =>
+        current.map((n) =>
+          n.id === node.id
+            ? { ...n, data: { ...n.data, keys: storedKeys } }
+            : n,
+        ),
+      );
+
+      // Pass through input to downstream nodes
+      output = input;
+    } else if (node.type === "human-review") {
+      const reviewData = node.data as HumanReviewData;
+      const multi = reviewData.multiReview;
+      const dependencyOutputs = incomingEdgesByNode[node.id]
+        .map((depId) => nodeOutputs[depId])
+        .filter(Boolean);
+      const input = dependencyOutputs.join('\n\n');
+      let finalContent = input;
+      let finalDecision: 'approved' | 'rejected' = 'approved';
+
+      if (multi?.enabled) {
+        const decisions: ReviewDecision[] = [];
+
+        for (let i = 0; i < multi.reviewerCount; i++) {
+          if (reviewDecisionRef) reviewDecisionRef.current = null;
+          if (setReviewRequest) {
+            setReviewRequest({
+              reviewerLabel: `Reviewer ${i + 1}`,
+              nodeName: reviewData.name,
+              instructions: reviewData.instructions,
+              content: finalContent,
+              mode: reviewData.reviewMode,
+            });
+          }
+
+          // Poll for decision (same pattern as error recovery)
+          while (reviewDecisionRef && reviewDecisionRef.current === null) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            // Check if execution was cancelled
+            if (executionControl?.current === 'cancelled') break;
+          }
+
+          if (executionControl?.current === 'cancelled') break;
+
+          const { decision, editedContent } = reviewDecisionRef!.current!;
+          decisions.push({ reviewer: `Reviewer ${i + 1}`, decision, timestamp: Date.now() });
+          if (editedContent) finalContent = editedContent;
+
+          if (canDecideEarly(decisions, multi.approvalRule, multi.reviewerCount)) break;
+        }
+
+        if (executionControl?.current !== 'cancelled') {
+          finalDecision = evaluateApprovalRule(decisions, multi.approvalRule);
+        }
+
+        // Update node with decisions
+        setNodes((current) =>
+          current.map((n) =>
+            n.id === node.id
+              ? { ...n, data: { ...n.data, multiReview: { ...multi, decisions }, lastDecision: finalDecision } }
+              : n,
+          ),
+        );
+      } else {
+        // Single reviewer
+        if (reviewDecisionRef) reviewDecisionRef.current = null;
+        if (setReviewRequest) {
+          setReviewRequest({
+            reviewerLabel: 'Reviewer',
+            nodeName: reviewData.name,
+            instructions: reviewData.instructions,
+            content: input,
+            mode: reviewData.reviewMode,
+          });
+        }
+
+        while (reviewDecisionRef && reviewDecisionRef.current === null) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          if (executionControl?.current === 'cancelled') break;
+        }
+
+        if (executionControl?.current !== 'cancelled' && reviewDecisionRef?.current !== null) {
+          const { decision, editedContent } = reviewDecisionRef!.current!;
+          if (editedContent) finalContent = editedContent;
+          finalDecision = decision;
+
+          setNodes((current) =>
+            current.map((n) =>
+              n.id === node.id ? { ...n, data: { ...n.data, lastDecision: finalDecision } } : n,
+            ),
+          );
+        }
+      }
+
+      // Log the human review decision to the audit trail (only if not cancelled)
+      if (executionControl?.current !== 'cancelled') {
+        auditLog.log({
+          nodeId: node.id,
+          nodeName: reviewData.name,
+          type: 'human-review',
+          decision: finalDecision,
+          beforeContent: input.slice(0, 2000),
+          afterContent: finalContent !== input ? finalContent.slice(0, 2000) : undefined,
+          reviewer: multi?.enabled
+            ? `Multiple (${multi.reviewerCount ?? 1} reviewer(s))`
+            : 'Reviewer',
+          metadata: {
+            reviewMode: reviewData.reviewMode,
+            multiReview: multi?.enabled ?? false,
+          },
+        });
+      }
+
+      if (finalDecision === 'rejected') {
+        throw new Error(`Content rejected by reviewer`);
+      }
+
+      output = finalContent;
+      setLogs((logs) => logs.concat(`👤 ${reviewData.name || 'Human Review'}: ${finalDecision}`));
     } else if (node.type === "result") {
       // Result node
       const incomingNodes = incomingEdgesByNode[node.id] || [];
@@ -470,7 +645,15 @@ export async function runParallel(
   executionControl?: React.MutableRefObject<ExecutionStatus>,
   errorRecoveryAction?: React.MutableRefObject<'retry' | 'skip' | 'abort' | null>,
   setCurrentError?: React.Dispatch<React.SetStateAction<{ nodeId: string; nodeName: string; message: string } | null>>,
-) {
+  setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>,
+  reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>,
+): Promise<{ memory: MemoryManager; auditLog: AuditLog }> {
+  // Create a workflow-scoped MemoryManager for this execution run
+  const workflowMemory = new MemoryManager('workflow');
+
+  // Create a fresh AuditLog for this execution run
+  const auditLog = new AuditLog();
+
   // Clear previous logs
   setLogs([]);
 
@@ -569,7 +752,7 @@ export async function runParallel(
         ...n,
         data: { ...n.data, executionState: 'idle' as const }
       })));
-      return;
+      return { memory: workflowMemory, auditLog };
     }
 
     // Skip nodes that have already been executed
@@ -586,7 +769,7 @@ export async function runParallel(
         ...n,
         data: { ...n.data, executionState: 'idle' as const }
       })));
-      return;
+      return { memory: workflowMemory, auditLog };
     }
 
     // Check for pause
@@ -603,7 +786,7 @@ export async function runParallel(
           ...n,
           data: { ...n.data, executionState: 'idle' as const }
         })));
-        return;
+        return { memory: workflowMemory, auditLog };
       }
 
       setLogs((logs) => logs.concat("▶️  Execution resumed."));
@@ -619,7 +802,11 @@ export async function runParallel(
       nodeOutputs,
       setLogs,
       setNodes,
-      executionControl
+      executionControl,
+      workflowMemory,
+      auditLog,
+      setReviewRequest,
+      reviewDecisionRef,
     };
 
     // Execute all nodes in this level in parallel
@@ -681,7 +868,7 @@ export async function runParallel(
               ...n,
               data: { ...n.data, executionState: 'idle' as const }
             })));
-            return;
+            return { memory: workflowMemory, auditLog };
           }
           // For skip or retry, continue (retry logic would need level re-execution)
           // For now, we skip failed nodes and continue
@@ -837,4 +1024,6 @@ export async function runParallel(
   }
 
   setLogs((logs) => logs.concat("✅ Done."));
+
+  return { memory: workflowMemory, auditLog };
 }

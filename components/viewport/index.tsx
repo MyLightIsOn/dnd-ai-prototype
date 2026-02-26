@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   Background,
   Controls,
@@ -9,6 +9,7 @@ import {
   addEdge,
   useReactFlow,
   MarkerType,
+  Panel,
 } from "@xyflow/react";
 import type {
   Node,
@@ -23,6 +24,8 @@ import type {
 import React from "react";
 import { nodeTypes } from "@/components/nodes";
 import type { TypedNode } from "@/types";
+import { detectMemoryConnections } from "@/lib/execution/memory-connections";
+import { MemoryOverlay } from "./memory-overlay";
 
 function ViewPort({
   nodes,
@@ -38,6 +41,9 @@ function ViewPort({
   onSelectionChange?: (params: OnSelectionChangeParams) => void;
 }) {
   const rf = useReactFlow();
+  const [showMemoryConnections, setShowMemoryConnections] = useState(false);
+
+  const memoryConnections = detectMemoryConnections(nodes, edges);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) =>
@@ -119,6 +125,20 @@ function ViewPort({
         <Background gap={16} />
         <MiniMap pannable zoomable />
         <Controls />
+        <Panel position="top-right">
+          <button
+            onClick={() => setShowMemoryConnections((v) => !v)}
+            className={`px-2 py-1 text-xs rounded border shadow-sm transition-colors ${
+              showMemoryConnections
+                ? "bg-purple-600 text-white border-purple-700"
+                : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+            }`}
+            title="Toggle memory connection overlay"
+          >
+            {showMemoryConnections ? "Hide Memory" : "Show Memory"}
+          </button>
+        </Panel>
+        <MemoryOverlay connections={memoryConnections} visible={showMemoryConnections} />
       </ReactFlow>
     </div>
   );

@@ -5,15 +5,20 @@ import ViewPort from "@/components/viewport";
 import Palette from "@/components/palette";
 import PropertiesPanel from "@/components/properties";
 import Console from "@/components/console";
+import { AuditTrail } from "@/components/audit-trail";
 import SettingsModal from "@/components/settings";
 import { ErrorDialog } from "@/components/error-dialog";
+import { HumanReviewModal } from "@/components/human-review-modal";
+import { MemoryInspector } from "@/components/memory-inspector";
 import { Settings } from "lucide-react";
 import React, { useMemo, useState, useRef } from "react";
 
 import { exportJSON } from "@/lib/exportJSON";
 import { importJSON } from "@/lib/importJSON";
-import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis } from "@/lib/addSample";
+import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis, addKeywordRouter, addLLMJudgeRouter, addRefineLoop, addMemoryPipeline, addContentReview, addMultiReviewerApproval } from "@/lib/addSample";
 import { runParallel as runLib, type ExecutionStatus } from "@/lib/execution/parallel-runner";
+import { MemoryManager } from "@/lib/execution/memory-manager";
+import { AuditLog } from "@/lib/execution/audit-log";
 
 import type { AgentData, ToolData, OutputData, TypedNode, PromptData, DocumentData, ChunkerData, NodeData } from "@/types";
 
@@ -24,6 +29,9 @@ export default function App() {
   const [logs, setLogs] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [executionStatus, setExecutionStatus] = useState<ExecutionStatus>('idle');
+  const [workflowMemory, setWorkflowMemory] = useState<MemoryManager | null>(null);
+  const [auditLog, setAuditLog] = useState<AuditLog | null>(null);
+  const [bottomTab, setBottomTab] = useState<'console' | 'audit'>('console');
   const executionControlRef = useRef<ExecutionStatus>('idle');
   const [currentError, setCurrentError] = useState<{
     nodeId: string;
@@ -31,6 +39,17 @@ export default function App() {
     message: string;
   } | null>(null);
   const errorRecoveryActionRef = useRef<'retry' | 'skip' | 'abort' | null>(null);
+  const [reviewRequest, setReviewRequest] = useState<{
+    reviewerLabel: string;
+    nodeName: string;
+    instructions?: string;
+    content: string;
+    mode: 'approve-reject' | 'edit-and-approve';
+  } | null>(null);
+  const reviewDecisionRef = useRef<{
+    decision: 'approved' | 'rejected';
+    editedContent?: string;
+  } | null>(null);
 
   const selected = useMemo(
     () => nodes.find((n) => n.id === selectedId),
@@ -65,7 +84,7 @@ export default function App() {
     setSelectedId(null);
   };
 
-  const addSample = (sampleType: 'summarizer' | 'rag' | 'multi-agent') => {
+  const addSample = (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop' | 'memory-pipeline' | 'content-review' | 'multi-reviewer') => {
     switch (sampleType) {
       case 'summarizer':
         addDocumentSummarizer(setNodes, setEdges);
@@ -76,6 +95,24 @@ export default function App() {
       case 'multi-agent':
         addMultiAgentAnalysis(setNodes, setEdges);
         break;
+      case 'keyword-router':
+        addKeywordRouter(setNodes, setEdges);
+        break;
+      case 'llm-judge-router':
+        addLLMJudgeRouter(setNodes, setEdges);
+        break;
+      case 'refine-loop':
+        addRefineLoop(setNodes, setEdges);
+        break;
+      case 'memory-pipeline':
+        addMemoryPipeline(setNodes, setEdges);
+        break;
+      case 'content-review':
+        addContentReview(setNodes, setEdges);
+        break;
+      case 'multi-reviewer':
+        addMultiReviewerApproval(setNodes, setEdges);
+        break;
     }
   };
 
@@ -85,7 +122,9 @@ export default function App() {
     executionControlRef.current = 'running';
     errorRecoveryActionRef.current = null;
 
-    await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControlRef, errorRecoveryActionRef, setCurrentError);
+    const result = await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControlRef, errorRecoveryActionRef, setCurrentError, setReviewRequest, reviewDecisionRef);
+    setWorkflowMemory(result.memory);
+    setAuditLog(result.auditLog);
 
     // Reset to idle after completion (unless already cancelled)
     const currentStatus = executionControlRef.current;
@@ -108,6 +147,7 @@ export default function App() {
   const cancel = () => {
     setExecutionStatus('cancelled');
     executionControlRef.current = 'cancelled';
+    setReviewRequest(null);
 
     // Reset to idle after a brief moment
     setTimeout(() => {
@@ -169,18 +209,52 @@ export default function App() {
             />
           </div>
 
-          <div className="row-span-2 bg-white border rounded-2xl p-3 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="text-xs uppercase tracking-wide text-gray-500">
-                Properties
+          <div className="row-span-2 flex flex-col gap-3 min-h-0">
+            <div className="bg-white border rounded-2xl p-3 space-y-3 flex-1 min-h-0 overflow-auto">
+              <div className="flex items-center justify-between">
+                <div className="text-xs uppercase tracking-wide text-gray-500">
+                  Properties
+                </div>
+                <Settings size={16} />
               </div>
-              <Settings size={16} />
+              <PropertiesPanel selected={selected} onChange={updateSelected} />
             </div>
-            <PropertiesPanel selected={selected} onChange={updateSelected} />
+            <div className="h-64 shrink-0">
+              <MemoryInspector
+                workflowMemory={workflowMemory}
+                isExecuting={executionStatus === 'running'}
+              />
+            </div>
           </div>
 
-          <div className="col-span-3">
-            <Console logs={logs} onClear={() => setLogs([])} />
+          <div className="col-span-3 flex flex-col gap-0">
+            <div className="flex items-center gap-1 px-1 pb-1">
+              <button
+                onClick={() => setBottomTab('console')}
+                className={`px-3 py-1 rounded-t text-xs font-medium transition-colors ${
+                  bottomTab === 'console'
+                    ? 'bg-white border border-b-0 border-gray-200 text-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Console
+              </button>
+              <button
+                onClick={() => setBottomTab('audit')}
+                className={`px-3 py-1 rounded-t text-xs font-medium transition-colors ${
+                  bottomTab === 'audit'
+                    ? 'bg-gray-900 border border-b-0 border-gray-700 text-gray-200'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Audit Trail
+              </button>
+            </div>
+            {bottomTab === 'console' ? (
+              <Console logs={logs} onClear={() => setLogs([])} />
+            ) : (
+              <AuditTrail auditLog={auditLog} />
+            )}
           </div>
         </div>
 
@@ -198,6 +272,21 @@ export default function App() {
           onSkip={handleErrorSkip}
           onAbort={handleErrorAbort}
         />
+
+        {reviewRequest && (
+          <HumanReviewModal
+            open={true}
+            reviewerLabel={reviewRequest.reviewerLabel}
+            nodeName={reviewRequest.nodeName}
+            instructions={reviewRequest.instructions}
+            content={reviewRequest.content}
+            mode={reviewRequest.mode}
+            onDecision={(decision, editedContent) => {
+              reviewDecisionRef.current = { decision, editedContent };
+              setReviewRequest(null);
+            }}
+          />
+        )}
       </ReactFlowProvider>
     </div>
   );

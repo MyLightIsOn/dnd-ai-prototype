@@ -6,6 +6,8 @@ import { DocumentNode } from "./document-node";
 import { ChunkerNode } from "./chunker-node";
 import { RouterNode } from "./router-node";
 import { LoopNode } from "./loop-node";
+import { MemoryNode } from "./memory-node";
+import { HumanReviewNode } from "./human-review-node";
 
 function NodeChrome({
   title,
@@ -142,6 +144,20 @@ export const AgentNode: React.FC<NodeProps> = ({ data }) => {
             {d.streaming && <span>stream</span>}
           </div>
         ) : null}
+        {(d.memoryRead && d.memoryRead.length > 0 || d.memoryWrite) && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {d.memoryRead?.map((key) => (
+              <span key={key} className="text-[10px] bg-purple-900/50 text-purple-300 rounded px-1">
+                📖 {key}
+              </span>
+            ))}
+            {d.memoryWrite && (
+              <span className="text-[10px] bg-pink-900/50 text-pink-300 rounded px-1">
+                💾 {d.memoryWrite}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </NodeChrome>
   );
@@ -208,4 +224,6 @@ export const nodeTypes: NodeTypes = {
   chunker: ChunkerNode,
   router: RouterNode,
   loop: LoopNode,
+  memory: MemoryNode,
+  'human-review': HumanReviewNode,
 };

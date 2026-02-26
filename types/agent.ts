@@ -9,4 +9,6 @@ export type AgentData = {
   maxTokens?: number;
   executionState?: 'idle' | 'executing' | 'completed' | 'error';
   executionError?: string;
+  memoryRead?: string[];
+  memoryWrite?: string;
 };
