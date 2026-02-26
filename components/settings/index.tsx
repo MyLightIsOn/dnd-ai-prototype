@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import ProviderConfig from './provider-config';
-import { getApiKey, setApiKey } from '@/lib/storage/api-keys';
+import { getApiKey, setApiKey, isEnvKey } from '@/lib/storage/api-keys';
 
 type ProviderName = 'openai' | 'anthropic' | 'google' | 'ollama';
 
@@ -54,8 +54,9 @@ export default function SettingsModal({
   };
 
   const handleSave = () => {
-    // Save all API keys to localStorage
+    // Save API keys to localStorage, skipping env-sourced keys
     providers.forEach((provider) => {
+      if (isEnvKey(provider)) return;
       const key = apiKeys[provider];
       if (key.trim()) {
         setApiKey(provider, key);
