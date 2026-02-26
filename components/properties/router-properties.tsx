@@ -161,7 +161,7 @@ export function RouterProperties({
 
         {data.routes && data.routes.length > 0 ? (
           <div className="space-y-3">
-            {data.routes.map((route, index) => (
+            {data.routes.map((route) => (
               <div key={route.id} className="p-3 border rounded-lg space-y-2 bg-gray-50">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
@@ -261,7 +261,7 @@ export function RouterProperties({
                         className="text-sm min-h-[80px]"
                       />
                       <div className="text-xs text-gray-500">
-                        Instructions for the LLM judge. The LLM will be asked to respond with "{route.label}" if the input matches this route.
+                        Instructions for the LLM judge. The LLM will be asked to respond with &quot;{route.label}&quot; if the input matches this route.
                       </div>
                     </div>
                   </div>
@@ -283,7 +283,7 @@ export function RouterProperties({
                         className="text-sm"
                       />
                       <div className="text-xs text-gray-500">
-                        JSON field to extract. Use dot notation for nested fields (e.g., "user.name")
+                        JSON field to extract. Use dot notation for nested fields (e.g., &quot;user.name&quot;)
                       </div>
                     </div>
                     <div className="grid gap-2">
@@ -335,7 +335,7 @@ export function RouterProperties({
           </div>
         ) : (
           <div className="text-xs text-gray-400 text-center py-4 border rounded-lg border-dashed">
-            No routes configured. Click "Add Route" to create one.
+            No routes configured. Click &quot;Add Route&quot; to create one.
           </div>
         )}
       </div>

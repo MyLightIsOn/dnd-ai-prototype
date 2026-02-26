@@ -45,3 +45,10 @@ next-env.d.ts
 
 # brainstorming sessions
 .superpowers/
+# worktrees
+.worktrees/
+
+# local dev / IDE
+.idea/
+CLAUDE.md
+docs/

@@ -1,7 +1,7 @@
 import React from "react";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
-import type { LoopData, LoopBreakCondition, AlwaysBreakCondition, KeywordBreakCondition, LLMJudgeBreakCondition } from "@/types/loop";
+import type { LoopData, AlwaysBreakCondition, KeywordBreakCondition, LLMJudgeBreakCondition } from "@/types/loop";
 import { getAllModels } from "@/lib/providers";
 
 interface LoopPropertiesProps {

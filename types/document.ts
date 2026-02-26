@@ -5,7 +5,7 @@ export type DocumentData = {
   content?: string;
   size?: number; // bytes
   uploadedAt?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   executionState?: 'idle' | 'executing' | 'completed' | 'error';
   executionError?: string;
 };

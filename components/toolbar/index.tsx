@@ -23,7 +23,7 @@ function ToolBar({
   onClear: () => void;
   onExport: () => void;
   onImport: React.ChangeEventHandler<HTMLInputElement>;
-  onAddSample: (sampleType: 'summarizer' | 'rag' | 'multi-agent') => void;
+  onAddSample: (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop' | 'web-search' | 'code-gen' | 'api-fetch' | 'db-report' | 'research-code') => void;
   onSettings: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -124,10 +124,90 @@ function ToolBar({
                 onAddSample('multi-agent');
                 setShowSampleMenu(false);
               }}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t last:rounded-b-lg"
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
             >
               <div className="font-medium">Multi-Agent Analysis</div>
               <div className="text-xs text-gray-500">Parallel agents + synthesis</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('keyword-router');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
+            >
+              <div className="font-medium">Keyword Router</div>
+              <div className="text-xs text-gray-500">Route by keywords → branching agents</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('llm-judge-router');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
+            >
+              <div className="font-medium">LLM Judge Router</div>
+              <div className="text-xs text-gray-500">AI-evaluated conditional routing</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('refine-loop');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
+            >
+              <div className="font-medium">Refine Loop</div>
+              <div className="text-xs text-gray-500">Iterative refinement with break condition</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('web-search');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
+            >
+              <div className="font-medium">Web Search Pipeline</div>
+              <div className="text-xs text-gray-500">Search → Summarize → Report</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('code-gen');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
+            >
+              <div className="font-medium">Code Gen + Execute</div>
+              <div className="text-xs text-gray-500">Generate JS → Run it</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('api-fetch');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
+            >
+              <div className="font-medium">API Fetch + Analyze</div>
+              <div className="text-xs text-gray-500">HTTP → Agent analysis</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('db-report');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
+            >
+              <div className="font-medium">DB Query + Report</div>
+              <div className="text-xs text-gray-500">Database → Agent report</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('research-code');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t last:rounded-b-lg"
+            >
+              <div className="font-medium">Research &amp; Code Pipeline</div>
+              <div className="text-xs text-gray-500">Search → Write JS → Run it</div>
             </button>
           </div>
         )}
