@@ -23,7 +23,7 @@ function ToolBar({
   onClear: () => void;
   onExport: () => void;
   onImport: React.ChangeEventHandler<HTMLInputElement>;
-  onAddSample: (sampleType: 'summarizer' | 'rag' | 'multi-agent') => void;
+  onAddSample: (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop' | 'memory-pipeline' | 'content-review' | 'multi-reviewer') => void;
   onSettings: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -124,10 +124,73 @@ function ToolBar({
                 onAddSample('multi-agent');
                 setShowSampleMenu(false);
               }}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t last:rounded-b-lg"
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
             >
               <div className="font-medium">Multi-Agent Analysis</div>
               <div className="text-xs text-gray-500">Parallel agents + synthesis</div>
+            </button>
+            <div className="px-4 py-1 text-[10px] uppercase tracking-wide text-gray-400 bg-gray-50 border-t border-b">
+              Phase 2 UAT
+            </div>
+            <button
+              onClick={() => {
+                onAddSample('keyword-router');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
+            >
+              <div className="font-medium">Keyword Router</div>
+              <div className="text-xs text-gray-500">Prompt → Router [keyword] → branches</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('llm-judge-router');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
+            >
+              <div className="font-medium">LLM Judge Router</div>
+              <div className="text-xs text-gray-500">Prompt → Router [llm-judge] → branches</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('refine-loop');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
+            >
+              <div className="font-medium">Refine Loop</div>
+              <div className="text-xs text-gray-500">Iterative refinement, 3 iterations</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('memory-pipeline');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
+            >
+              <div className="font-medium">Memory Pipeline</div>
+              <div className="text-xs text-gray-500">Agent → Memory → Agent → Result</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('content-review');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t"
+            >
+              <div className="font-medium">Content Review</div>
+              <div className="text-xs text-gray-500">Agent → Human Review [edit-approve]</div>
+            </button>
+            <button
+              onClick={() => {
+                onAddSample('multi-reviewer');
+                setShowSampleMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm border-t last:rounded-b-lg"
+            >
+              <div className="font-medium">Multi-Reviewer Approval</div>
+              <div className="text-xs text-gray-500">Agent → Board approval [2-of-3]</div>
             </button>
           </div>
         )}

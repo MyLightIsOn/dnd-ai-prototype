@@ -15,7 +15,7 @@ import React, { useMemo, useState, useRef } from "react";
 
 import { exportJSON } from "@/lib/exportJSON";
 import { importJSON } from "@/lib/importJSON";
-import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis } from "@/lib/addSample";
+import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis, addKeywordRouter, addLLMJudgeRouter, addRefineLoop, addMemoryPipeline, addContentReview, addMultiReviewerApproval } from "@/lib/addSample";
 import { runParallel as runLib, type ExecutionStatus } from "@/lib/execution/parallel-runner";
 import { MemoryManager } from "@/lib/execution/memory-manager";
 import { AuditLog } from "@/lib/execution/audit-log";
@@ -84,7 +84,7 @@ export default function App() {
     setSelectedId(null);
   };
 
-  const addSample = (sampleType: 'summarizer' | 'rag' | 'multi-agent') => {
+  const addSample = (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop' | 'memory-pipeline' | 'content-review' | 'multi-reviewer') => {
     switch (sampleType) {
       case 'summarizer':
         addDocumentSummarizer(setNodes, setEdges);
@@ -94,6 +94,24 @@ export default function App() {
         break;
       case 'multi-agent':
         addMultiAgentAnalysis(setNodes, setEdges);
+        break;
+      case 'keyword-router':
+        addKeywordRouter(setNodes, setEdges);
+        break;
+      case 'llm-judge-router':
+        addLLMJudgeRouter(setNodes, setEdges);
+        break;
+      case 'refine-loop':
+        addRefineLoop(setNodes, setEdges);
+        break;
+      case 'memory-pipeline':
+        addMemoryPipeline(setNodes, setEdges);
+        break;
+      case 'content-review':
+        addContentReview(setNodes, setEdges);
+        break;
+      case 'multi-reviewer':
+        addMultiReviewerApproval(setNodes, setEdges);
         break;
     }
   };
