@@ -5,6 +5,7 @@ import ViewPort from "@/components/viewport";
 import Palette from "@/components/palette";
 import PropertiesPanel from "@/components/properties";
 import Console from "@/components/console";
+import { AuditTrail } from "@/components/audit-trail";
 import SettingsModal from "@/components/settings";
 import { ErrorDialog } from "@/components/error-dialog";
 import { HumanReviewModal } from "@/components/human-review-modal";
@@ -30,6 +31,7 @@ export default function App() {
   const [executionStatus, setExecutionStatus] = useState<ExecutionStatus>('idle');
   const [workflowMemory, setWorkflowMemory] = useState<MemoryManager | null>(null);
   const [auditLog, setAuditLog] = useState<AuditLog | null>(null);
+  const [bottomTab, setBottomTab] = useState<'console' | 'audit'>('console');
   const executionControlRef = useRef<ExecutionStatus>('idle');
   const [currentError, setCurrentError] = useState<{
     nodeId: string;
@@ -206,8 +208,34 @@ export default function App() {
             </div>
           </div>
 
-          <div className="col-span-3">
-            <Console logs={logs} onClear={() => setLogs([])} />
+          <div className="col-span-3 flex flex-col gap-0">
+            <div className="flex items-center gap-1 px-1 pb-1">
+              <button
+                onClick={() => setBottomTab('console')}
+                className={`px-3 py-1 rounded-t text-xs font-medium transition-colors ${
+                  bottomTab === 'console'
+                    ? 'bg-white border border-b-0 border-gray-200 text-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Console
+              </button>
+              <button
+                onClick={() => setBottomTab('audit')}
+                className={`px-3 py-1 rounded-t text-xs font-medium transition-colors ${
+                  bottomTab === 'audit'
+                    ? 'bg-gray-900 border border-b-0 border-gray-700 text-gray-200'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Audit Trail
+              </button>
+            </div>
+            {bottomTab === 'console' ? (
+              <Console logs={logs} onClear={() => setLogs([])} />
+            ) : (
+              <AuditTrail auditLog={auditLog} />
+            )}
           </div>
         </div>
 
