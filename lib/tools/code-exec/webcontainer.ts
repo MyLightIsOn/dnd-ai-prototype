@@ -61,7 +61,10 @@ export const codeExecTool: Tool = {
       // Wait for stream to finish flushing after process exits
       await collectStream.catch(() => {}); // ignore stream errors
 
-      const stdout = chunks.join("");
+      const raw = chunks.join("");
+      // Strip ANSI escape codes (color/formatting) from Node.js stdout
+      // eslint-disable-next-line no-control-regex
+      const stdout = raw.replace(/\x1B\[[0-9;]*m/g, "");
 
       if (exitCode !== 0) {
         return {
