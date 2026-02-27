@@ -42,3 +42,8 @@ next-env.d.ts
 
 # worktrees
 .worktrees/
+
+# local dev / IDE
+.idea/
+CLAUDE.md
+docs/
