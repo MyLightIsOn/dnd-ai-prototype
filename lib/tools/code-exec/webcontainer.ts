@@ -63,7 +63,6 @@ export const codeExecTool: Tool = {
 
       const raw = chunks.join("");
       // Strip ANSI escape codes (color/formatting) from Node.js stdout
-      // eslint-disable-next-line no-control-regex
       const stdout = raw.replace(/\x1B\[[0-9;]*m/g, "");
 
       if (exitCode !== 0) {
