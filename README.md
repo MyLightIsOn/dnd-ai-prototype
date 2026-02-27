@@ -197,16 +197,14 @@ Open [http://localhost:3000](http://localhost:3000). The canvas loads with a sam
 
 ## Project Status
 
-| Phase | Status |
-|-------|--------|
-| Phase 1 — Multi-model providers, document processing, streaming, execution controls | ✅ Complete |
-| Phase 2A — Parallel execution, Router node, Loop node | ✅ Complete |
-| Phase 2B — LLM-as-Judge routing, JSON-field routing, loop improvements | ✅ Complete |
-| Phase 2C — Memory system, Human Review node, Audit Trail | ✅ Complete |
-| Phase 3 — Tool integrations (web search, HTTP, code execution) | Planned |
-| Phase 4 — Workflow templates, UX polish, undo/redo | Planned |
-
-See [`docs/implementation-plans/ROADMAP.md`](docs/implementation-plans/ROADMAP.md) for detailed planning notes.
+| Phase | Status      |
+|-------|-------------|
+| Phase 1 — Multi-model providers, document processing, streaming, execution controls | ✅ Complete  |
+| Phase 2A — Parallel execution, Router node, Loop node | ✅ Complete  |
+| Phase 2B — LLM-as-Judge routing, JSON-field routing, loop improvements | ✅ Complete  |
+| Phase 2C — Memory system, Human Review node, Audit Trail | ✅ Complete  |
+| Phase 3 — Tool integrations (web search, HTTP, code execution) | ✅ Complete  |
+| Phase 4 — Workflow templates, UX polish, undo/redo | In progress |
 
 ---
 
