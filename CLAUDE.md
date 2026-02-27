@@ -411,8 +411,16 @@ Memory, human oversight, and audit trail. Key features:
 - **Human Review node**: Single and multi-reviewer support; approval rules (1-of-N, all-must-approve, M-of-N); edit-and-approve mode allowing reviewers to modify content before passing it downstream
 - **Audit Trail**: `AuditLog` class capturing every node execution event; Audit viewer UI with filtering and search; JSON export of the full audit log
 
+### Phase 3 - Complete ✅
+Tool integrations with real execution logic. Key features:
+- **Web Search**: Brave Search API (server-proxied via Next.js API route), configurable result count and domain filters
+- **Code Execution**: WebContainers (in-browser Node.js), runs JavaScript, captures stdout, timeout protection
+- **HTTP Tool**: Generic HTTP client (GET/POST/PUT/DELETE), custom headers, bearer/API key auth
+- **Database Tool**: Mock Postgres query tool returning simulated tabular data
+- **Tool Registry**: Unified tool dispatch system mirroring the provider registry pattern
+- **COOP/COEP headers**: Added for WebContainer cross-origin isolation
+
 ### Future Phases
-- Phase 3: Tool integrations (web search, RAG, HTTP calls)
 - Phase 4: Workflow templates and UX polish
 - Phase 5: Collaboration features
 - Phase 6: Testing infrastructure

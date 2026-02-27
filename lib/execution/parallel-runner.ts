@@ -15,6 +15,8 @@ import { shouldBreakLoop } from "./loop-evaluator";
 import { MemoryManager, globalMemoryInstance } from "./memory-manager";
 import { evaluateApprovalRule, canDecideEarly } from "./approval-evaluator";
 import { AuditLog } from "./audit-log";
+import "@/lib/tools/index"; // register all tools (side-effect import)
+import { getTool } from "@/lib/tools/registry";
 
 /**
  * Filters edges based on router and loop execution decisions.
@@ -275,19 +277,45 @@ async function executeNode(
         }
       }
     } else if (node.type === "tool") {
-      // Tool execution
       const toolData = node.data as ToolData;
       const dependencyOutputs = incomingEdgesByNode[node.id]
         .map((depId) => nodeOutputs[depId])
         .filter(Boolean);
-      const endpoint = toolData?.config?.endpoint || "(no endpoint)";
+      const input = dependencyOutputs.join("\n");
+      const kind = (toolData.kind ?? "web-search") as string;
+      const tool = getTool(kind);
 
-      const logText = `🔧 ${toolData.name || "Tool"} [${toolData.kind || "tool"}]\nGET ${endpoint}\nBody: ${dependencyOutputs
-        .join("\n")
-        .slice(0, 120)}`;
+      setLogs((logs) =>
+        logs.concat(`🔧 ${toolData.name || "Tool"} [${kind}] — running…`)
+      );
 
-      output = logText;
-      setLogs((logs) => logs.concat(logText));
+      if (!tool) {
+        throw new Error(`Unknown tool kind: ${kind}`);
+      }
+
+      const result = await tool.execute(input, toolData.config ?? {});
+
+      if (!result.success) {
+        throw new Error(result.error ?? "Tool execution failed");
+      }
+
+      output = result.output;
+
+      // Store result on node data for properties panel preview
+      setNodes((nodes) =>
+        nodes.map((n) =>
+          n.id === node.id
+            ? { ...n, data: { ...n.data, lastResult: result.output } }
+            : n
+        )
+      );
+
+      setLogs((logs) => {
+        const updated = [...logs];
+        updated[updated.length - 1] =
+          `🔧 ${toolData.name || "Tool"} [${kind}]\n${result.output.slice(0, 200)}${result.output.length > 200 ? "…" : ""}`;
+        return updated;
+      });
     } else if (node.type === "chunker") {
       // Chunker node
       const chunkerData = node.data as ChunkerData;

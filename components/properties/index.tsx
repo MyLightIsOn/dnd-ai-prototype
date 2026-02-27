@@ -13,6 +13,7 @@ import { RouterProperties } from "./router-properties";
 import { LoopProperties } from "./loop-properties";
 import { MemoryProperties } from "./memory-properties";
 import { HumanReviewProperties } from "./human-review-properties";
+import { ToolProperties } from "./tool-properties";
 
 function PropertiesPanel({
   selected,
@@ -59,29 +60,10 @@ function PropertiesPanel({
         </>
       )}
       {type === "tool" && (
-        <>
-          <div className="grid gap-2">
-            <label className="text-xs text-gray-600">Kind</label>
-            <Input
-              value={(data as ToolData).kind || "http"}
-              onChange={(e) => onChange({ kind: e.target.value })}
-            />
-          </div>
-          <div className="grid gap-2">
-            <label className="text-xs text-gray-600">Endpoint</label>
-            <Input
-              value={(data as ToolData).config?.endpoint || ""}
-              onChange={(e) =>
-                onChange({
-                  config: {
-                    ...((data as ToolData).config || {}),
-                    endpoint: e.target.value,
-                  },
-                })
-              }
-            />
-          </div>
-        </>
+        <ToolProperties
+          data={data as ToolData}
+          onChange={onChange}
+        />
       )}
       {type === "result" && (
         <>

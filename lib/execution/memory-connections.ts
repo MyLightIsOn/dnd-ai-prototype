@@ -1,4 +1,3 @@
-import { Edge } from '@xyflow/react';
 import { TypedNode } from '@/types/graph';
 import { AgentData } from '@/types/agent';
 
@@ -11,7 +10,6 @@ export interface MemoryConnection {
 
 export function detectMemoryConnections(
   nodes: TypedNode[],
-  _edges: Edge[],
 ): MemoryConnection[] {
   // Find memory nodes
   const memoryNodes = nodes.filter((n) => n.type === 'memory');
@@ -23,8 +21,8 @@ export function detectMemoryConnections(
   nodes.forEach((node) => {
     if (node.type !== 'agent') return;
     const data = node.data as AgentData;
-    const reads: string[] = (data as any).memoryRead ?? [];
-    const writeKey: string | undefined = (data as any).memoryWrite;
+    const reads: string[] = data.memoryRead ?? [];
+    const writeKey: string | undefined = data.memoryWrite;
 
     if (reads.length > 0) {
       connections.push({ source: memoryNodeId, target: node.id, type: 'read', keys: reads });

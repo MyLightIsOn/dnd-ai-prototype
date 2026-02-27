@@ -43,7 +43,7 @@ function ViewPort({
   const rf = useReactFlow();
   const [showMemoryConnections, setShowMemoryConnections] = useState(false);
 
-  const memoryConnections = detectMemoryConnections(nodes, edges);
+  const memoryConnections = detectMemoryConnections(nodes);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) =>

@@ -635,6 +635,307 @@ export function addContentReview(
 }
 
 /**
+ * Sample 8: Code Gen + Execute
+ * Prompt → Agent (code writer) → Tool (code-exec) → Result
+ * Demonstrates: code generation, code execution via WebContainers
+ */
+export function addCodeGenSample(
+  setNodes: (nodes: TypedNode[]) => void,
+  setEdges: (edges: Edge[]) => void,
+) {
+  const prompt: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "prompt",
+    position: { x: 100, y: 50 },
+    data: {
+      name: "Task",
+      text: "Write a program that prints the first 15 Fibonacci numbers",
+    },
+  } as TypedNode;
+
+  const codeWriter: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "agent",
+    position: { x: 100, y: 210 },
+    data: {
+      name: "Code Writer",
+      model: "openai/gpt-4o-mini",
+      prompt: "Write a JavaScript program for Node.js that accomplishes this task:\n\n{{input}}\n\nReturn ONLY the JavaScript code. No markdown code fences, no explanation, just raw executable JavaScript.",
+      mode: "live",
+      streaming: true,
+    },
+  } as TypedNode;
+
+  const runCode: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "tool",
+    position: { x: 100, y: 370 },
+    data: {
+      name: "Run Code",
+      kind: "code-exec",
+      config: { code: "", timeout: 15 },
+    },
+  } as TypedNode;
+
+  const result: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "result",
+    position: { x: 100, y: 530 },
+    data: { name: "Output", preview: "" },
+  } as TypedNode;
+
+  setNodes([prompt, codeWriter, runCode, result]);
+  setEdges([
+    edge(prompt.id, codeWriter.id),
+    edge(codeWriter.id, runCode.id),
+    edge(runCode.id, result.id),
+  ]);
+}
+
+/**
+ * Sample 9: API Fetch + Analyze
+ * Tool (HTTP GET) + Prompt → Agent (data analyst) → Result
+ * Demonstrates: HTTP tool, multi-input agent, data analysis
+ */
+export function addApiFetchSample(
+  setNodes: (nodes: TypedNode[]) => void,
+  setEdges: (edges: Edge[]) => void,
+) {
+  const prompt: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "prompt",
+    position: { x: 100, y: 50 },
+    data: {
+      name: "Instructions",
+      text: "Analyze the user data from the API and identify any patterns",
+    },
+  } as TypedNode;
+
+  const fetchTool: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "tool",
+    position: { x: 100, y: 210 },
+    data: {
+      name: "Fetch Users API",
+      kind: "http",
+      config: {
+        method: "GET",
+        url: "https://jsonplaceholder.typicode.com/users",
+        headers: [],
+        body: undefined,
+        auth: undefined,
+      },
+    },
+  } as TypedNode;
+
+  const analyst: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "agent",
+    position: { x: 100, y: 370 },
+    data: {
+      name: "Data Analyst",
+      model: "openai/gpt-4o-mini",
+      prompt: "You fetched the following JSON data from an API:\n\n{{input}}\n\nAnalyze this data and provide:\n1. A brief summary of what the dataset contains\n2. 2-3 interesting observations or patterns\n3. A short conclusion",
+      mode: "live",
+      streaming: true,
+    },
+  } as TypedNode;
+
+  const result: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "result",
+    position: { x: 100, y: 530 },
+    data: { name: "Analysis", preview: "" },
+  } as TypedNode;
+
+  setNodes([prompt, fetchTool, analyst, result]);
+  setEdges([
+    edge(prompt.id, analyst.id),
+    edge(fetchTool.id, analyst.id),
+    edge(analyst.id, result.id),
+  ]);
+}
+
+/**
+ * Sample 10: DB Query + Report
+ * Tool (database) → Agent (report writer) → Result
+ * Demonstrates: database tool, report generation
+ */
+export function addDbReportSample(
+  setNodes: (nodes: TypedNode[]) => void,
+  setEdges: (edges: Edge[]) => void,
+) {
+  const queryTool: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "tool",
+    position: { x: 100, y: 50 },
+    data: {
+      name: "Query Users",
+      kind: "database",
+      config: {
+        connectionString: "",
+        query: "SELECT id, name, email, created_at FROM users ORDER BY created_at DESC LIMIT 10;",
+      },
+    },
+  } as TypedNode;
+
+  const reportWriter: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "agent",
+    position: { x: 100, y: 210 },
+    data: {
+      name: "Report Writer",
+      model: "openai/gpt-4o-mini",
+      prompt: "You have queried a database and received these results:\n\n{{input}}\n\nWrite a concise professional report summarizing:\n1. What data was returned\n2. Key observations\n3. Any notable patterns",
+      mode: "live",
+      streaming: true,
+    },
+  } as TypedNode;
+
+  const result: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "result",
+    position: { x: 100, y: 370 },
+    data: { name: "Report", preview: "" },
+  } as TypedNode;
+
+  setNodes([queryTool, reportWriter, result]);
+  setEdges([
+    edge(queryTool.id, reportWriter.id),
+    edge(reportWriter.id, result.id),
+  ]);
+}
+
+/**
+ * Sample 11: Research & Code Pipeline
+ * Prompt → Tool (web-search) → Agent (code generator) → Tool (code-exec) → Result
+ * Demonstrates: multi-tool pipeline, search-to-code workflow
+ */
+export function addResearchCodeSample(
+  setNodes: (nodes: TypedNode[]) => void,
+  setEdges: (edges: Edge[]) => void,
+) {
+  const prompt: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "prompt",
+    position: { x: 100, y: 50 },
+    data: {
+      name: "Topic",
+      text: "JavaScript array methods",
+    },
+  } as TypedNode;
+
+  const webSearch: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "tool",
+    position: { x: 100, y: 210 },
+    data: {
+      name: "Web Search",
+      kind: "web-search",
+      config: { maxResults: 5 },
+    },
+  } as TypedNode;
+
+  const codeGenerator: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "agent",
+    position: { x: 100, y: 370 },
+    data: {
+      name: "Code Generator",
+      model: "openai/gpt-4o-mini",
+      prompt: "You are a JavaScript educator. Based on these search results:\n\n{{input}}\n\nWrite a working Node.js program that demonstrates the key concepts found in the search results. The program should:\n- Use console.log() to show examples\n- Be self-contained (no external imports)\n- Demonstrate at least 3-4 concepts\n\nReturn ONLY raw JavaScript code. No markdown fences, no explanation.",
+      mode: "live",
+      streaming: true,
+    },
+  } as TypedNode;
+
+  const runCode: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "tool",
+    position: { x: 100, y: 530 },
+    data: {
+      name: "Run Code",
+      kind: "code-exec",
+      config: { code: "", timeout: 20 },
+    },
+  } as TypedNode;
+
+  const result: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "result",
+    position: { x: 100, y: 690 },
+    data: { name: "Output", preview: "" },
+  } as TypedNode;
+
+  setNodes([prompt, webSearch, codeGenerator, runCode, result]);
+  setEdges([
+    edge(prompt.id, webSearch.id),
+    edge(webSearch.id, codeGenerator.id),
+    edge(codeGenerator.id, runCode.id),
+    edge(runCode.id, result.id),
+  ]);
+}
+
+/**
+ * Sample 7: Web Search Pipeline
+ * Prompt → Web Search Tool → Summarizer Agent → Result
+ * Demonstrates: web search tool, live agent summarization
+ */
+export function addWebSearchSample(
+  setNodes: (nodes: TypedNode[]) => void,
+  setEdges: (edges: Edge[]) => void,
+) {
+  const prompt: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "prompt",
+    position: { x: 50, y: 220 },
+    data: {
+      name: "Search Topic",
+      text: "latest advances in quantum computing 2025",
+    },
+  } as TypedNode;
+
+  const webSearch: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "tool",
+    position: { x: 300, y: 220 },
+    data: {
+      name: "Web Search",
+      kind: "web-search",
+      config: { maxResults: 5 },
+    },
+  } as TypedNode;
+
+  const summarizer: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "agent",
+    position: { x: 580, y: 220 },
+    data: {
+      name: "Summarizer",
+      model: "openai/gpt-4o-mini",
+      prompt: "Summarize the following search results into a concise 3-paragraph report:\n\n{{input}}",
+      mode: "live",
+      streaming: true,
+      temperature: 0.4,
+    },
+  } as TypedNode;
+
+  const result: TypedNode = {
+    id: crypto.randomUUID(),
+    type: "result",
+    position: { x: 880, y: 220 },
+    data: { name: "Research Report", preview: "" },
+  } as TypedNode;
+
+  setNodes([prompt, webSearch, summarizer, result]);
+  setEdges([
+    edge(prompt.id, webSearch.id),
+    edge(webSearch.id, summarizer.id),
+    edge(summarizer.id, result.id),
+  ]);
+}
+
+/**
  * UAT Sample 6: Multi-Reviewer Approval
  * Prompt → Agent → Human Review [3 reviewers, 2-of-3] → Result
  * Demonstrates: multi-reviewer workflow, approval rules, audit trail with multiple decisions
