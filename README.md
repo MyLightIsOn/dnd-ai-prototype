@@ -1,190 +1,73 @@
+# inference-sandbox
 
----
-# 🧠 Multi-Agent Workflow Studio
+A visual, node-based editor for designing, executing, and evaluating multi-agent AI workflows across multiple LLM providers.
 
-> A visual playground for designing, running, and sharing multi-agent AI workflows — no backend, no setup, no hassle.
----
+![inference-sandbox screenshot](docs/screenshot.png)
 
-<img src="docs/screenshot.png" alt="screenshot" width="640" />
+## What it does
 
-## ✨ Overview
+Build workflows by connecting nodes on a canvas — Prompt, Agent, Tool, Router, Document, Chunker, and Result. Run them against real LLM APIs and compare outputs across providers side by side.
 
-**Multi-Agent Workflow Studio** lets you drag-and-drop **agents**, **tools**, and **outputs** into a visual flowchart, connect them, and instantly simulate how they interact.  
-It’s a lightweight sandbox for testing **agentic AI ideas** without having to spin up servers, write glue code, or manage APIs.
+**Supported providers:** OpenAI, Anthropic (Claude), Google AI (Gemini), Ollama (local/custom models)
 
-- 🧩 **Flowchart-style editor** – build agent pipelines visually with React Flow.  
-- ⚡ **Mock or Live** mode – toggle between fake responses and real LLM calls.  
-- 🔌 **Extensible providers** – add new LLMs (OpenAI, Anthropic, Ollama, etc.) via small adapter files.  
-- 📦 **JSON-based flows** – save, load, and share your prototypes easily.  
-- 🪄 **Zero setup** – everything runs locally in the browser or via a single Next.js dev server.
+## Features
 
----
+- **Visual canvas** — drag-and-drop node editor powered by React Flow
+- **Multi-provider execution** — run the same workflow against N providers in parallel
+- **Compare Mode** — view outputs side by side with synchronized scrolling *(coming in Phase 1)*
+- **Shadow Test Mode** — diff your local Ollama model against a frontier model *(coming in Phase 1)*
+- **Streaming** — real-time token-by-token output display
+- **Document processing** — PDF, TXT, MD, and code file support with chunking
+- **Cost tracking** — per-run token usage and estimated cost per provider
+- **Import/export** — save and share workflows as JSON
 
-## 🚀 Quickstart
-
-### 1. Clone and install
+## Quick start (local, no backend)
 
 ```bash
-git clone https://github.com/<yourname>/multi-agent-workflow-studio.git
-cd multi-agent-workflow-studio
+# Prerequisites: Node.js 20+, pnpm
+git clone https://github.com/MyLightIsOn/inference-sandbox.git
+cd inference-sandbox
 pnpm install
-````
-
-### 2. Run in mock mode
-
-```bash
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) – you’ll see the drag-and-drop canvas with sample nodes.
+Open [http://localhost:3000](http://localhost:3000). No API keys required for mock mode.
 
-> 🧩 **No API keys required**.
-> Everything runs in **mock mode** until you add real providers.
+To use live LLM execution, click the ⚙️ Settings button and add your API keys.
 
-### 3. Try a sample flow
+## Self-hosting with Supabase (optional)
 
-* Click **Sample Flow** in the toolbar, or
-* Import `/examples/research-write.flow.json`.
+Supabase adds persistent run history, annotations, and shareable snapshots. Without it, the app works fully in localStorage mode.
 
-Then press **▶ Run** to simulate the workflow. Logs appear in the bottom console.
+> Self-hosting setup (docker-compose, .env.local.example) is added in Phase 0 Task 15. See `docs/SELF_HOSTING.md` once that task is complete.
 
----
+## Tech stack
 
-## 🔑 Going Live (optional)
+- **Framework:** Next.js 16 (App Router), React 19, TypeScript 5
+- **Canvas:** React Flow (`@xyflow/react`)
+- **Styling:** Tailwind CSS 4, shadcn/ui
+- **LLM SDKs:** openai, @anthropic-ai/sdk, @google/generative-ai
+- **Backend (optional):** Supabase (Postgres + auth + storage)
+- **Tests:** Vitest
+- **Deployment:** Vercel
 
-When you’re ready to test with real models:
+## Roadmap
 
-1. Open **Settings → Environments**.
-2. Add your API key(s) – stored **only in localStorage** (never uploaded).
-3. Switch a node’s **mode** from `mock` → `live`.
-4. Run again. You’ll see actual model responses streaming in.
+| Phase | Feature | Status |
+|-------|---------|--------|
+| 1 | Compare Mode — run N providers simultaneously | Planned |
+| 1 | Shadow Test Mode — diff local vs frontier models | Planned |
+| 2 | Qualitative Annotation — rate and annotate outputs | Planned |
+| 2 | Run Observability — latency, tokens, cost per node | Planned |
+| 3 | Run History — persistent log with filters and trends | Planned |
+| 3 | Shareable Snapshots — export runs as HTML or URL | Planned |
+| 4 | Prompt Versioning — track prompt changes across runs | Planned |
+| 4 | Template Library — curated community workflow templates | Planned |
 
-Supports (initially):
+## Contributing
 
-* OpenAI (`gpt-4o-mini`, etc.)
-* Ollama (local models)
-* Anthropic (coming soon)
+See [CONTRIBUTING.md](CONTRIBUTING.md). Issues and PRs welcome.
 
----
+## License
 
-## 🧱 Architecture
-
-| Layer               | Description                                          |
-| ------------------- | ---------------------------------------------------- |
-| **Frontend**        | Next.js + TypeScript + React Flow                    |
-| **State**           | Zustand for UI state; JSON export for persistence    |
-| **UI**              | Tailwind CSS + shadcn/ui (Radix primitives)          |
-| **Runner**          | DAG-based engine with mock + live modes              |
-| **Schema**          | Versioned `flow.v1.json` format (validated with zod) |
-| **Providers/Tools** | Extensible plugin registry                           |
-
-No backend is required.
-All flows, keys, and runs live locally as JSON until you opt into a real API.
-
----
-
-## 🧩 Flow Format
-
-Flows are portable `.json` files that look like this:
-
-```json
-{
-  "version": "1.0.0",
-  "flow": {
-    "name": "Research → Write",
-    "nodes": [
-      { "id": "a1", "type": "agent", "mode": "mock", "config": { "prompt": "Summarize topic." } },
-      { "id": "t1", "type": "tool", "mode": "mock", "config": { "toolId": "web-search" } },
-      { "id": "o1", "type": "output", "mode": "mock", "config": {} }
-    ],
-    "edges": [
-      { "id": "e1", "source": "a1", "target": "t1" },
-      { "id": "e2", "source": "t1", "target": "o1" }
-    ]
-  }
-}
-```
-
-See [`docs/flow-format.md`](docs/flow-format.md) for the full schema.
-
----
-
-## 🧰 Tech Stack
-
-* **Frontend**: [Next.js](https://nextjs.org/), [TypeScript](https://www.typescriptlang.org/)
-* **Canvas**: [React Flow](https://reactflow.dev/)
-* **UI**: [Tailwind CSS](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/)
-* **State Management**: [Zustand](https://zustand-demo.pmnd.rs/)
-* **Validation**: [zod](https://zod.dev/)
-* **Icons**: [lucide-react](https://lucide.dev/)
-* **Build**: [pnpm](https://pnpm.io/), [Vercel](https://vercel.com/) (optional)
-
----
-
-## 🧪 Development
-
-```bash
-# run dev server
-pnpm dev
-
-# lint & typecheck
-pnpm lint
-pnpm typecheck
-
-# run tests
-pnpm test
-```
-
----
-
-## 🌍 Sharing & Collaboration
-
-Flows are portable JSON files — just export and share them:
-
-```bash
-📁 examples/
-├── research-write.flow.json
-├── two-agent-debate.flow.json
-└── rag-summary.flow.json
-```
-
-Anyone can import a `.flow.json` file and run it instantly.
-
----
-
-## 🧑‍💻 Contributing
-
-Contributions are welcome! ❤️
-
-1. Fork the repo
-2. Create a feature branch:
-   `git checkout -b feature/new-tool`
-3. Commit your changes
-4. Open a PR
-
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, code style, and testing details.
-
-We follow the [Contributor Covenant](CODE_OF_CONDUCT.md).
-
----
-
-## 📦 Roadmap
-
-* [ ] Flow editor MVP (React Flow)
-* [ ] Mock runner & console
-* [ ] Environment setup screen
-* [ ] Live execution via OpenAI/Ollama
-* [ ] Tool plugins (RAG, Web Search, HTTP)
-* [ ] JSON schema validation + examples
-* [ ] Docs site with guides & templates
-
-See [ROADMAP.md](docs/ROADMAP.md) for current milestones.
-
----
-
-## 🛡️ License
-
-MIT © 2025 Lawrence Moore
-
----
-
+MIT — see [LICENSE](LICENSE)
