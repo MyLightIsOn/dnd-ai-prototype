@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-Agent Workflow Studio is a visual flowchart-based editor for designing and simulating multi-agent AI workflows. Built with Next.js, React Flow, and TypeScript, it allows users to drag-and-drop agents, tools, and outputs, connect them, and run simulations (mock or live mode).
+inference-sandbox is a visual, node-based editor for designing, executing, and evaluating multi-agent AI workflows. Built with Next.js, React Flow, and TypeScript.
+
+Previously named `dnd-ai-prototype`. See `docs/superpowers/specs/` for design specs.
 
 ## Common Commands
 
@@ -19,10 +21,14 @@ pnpm typecheck       # Run TypeScript type checking
 ```
 
 ### Testing
-There is no automated test suite currently configured. Manual testing guidance is available:
-- See `TESTING_GUIDE.md` for comprehensive manual testing procedures (23 test scenarios)
-- Test scenarios cover: basic execution, streaming, error handling, document processing, multi-provider support, execution controls, and error recovery
-- Each test includes step-by-step instructions, expected results, and troubleshooting tips
+
+```bash
+pnpm test          # run unit tests (Vitest)
+pnpm test:watch    # watch mode
+pnpm typecheck     # TypeScript type check
+```
+
+Unit tests live in `tests/`. Manual test scenarios are in `docs/TESTING_GUIDE.md`.
 
 ## Architecture
 
@@ -91,23 +97,18 @@ components/
   ui/              # shadcn/ui components (button, input, textarea, dialog, etc.)
 
 lib/
-  run.ts           # DAG execution engine with parallel support, streaming, error recovery
-  topoSort.ts      # Topological sort + cycle detection
-  exportJSON.ts    # Download workflow as JSON
-  importJSON.ts    # Load workflow from JSON file
-  createSampleGraph.ts  # Generate example workflow
-  addSample.ts     # Helper to add sample to state
-  utils.ts         # Tailwind utility functions
-  providers/       # LLM provider abstractions (OpenAI, Anthropic, Google, Ollama)
-    base.ts        # Base provider interface with streaming support
-    registry.ts    # Provider registration and lookup
-    pricing.ts     # Cost calculation for all models
-    openai.ts, anthropic.ts, google.ts, ollama.ts  # Provider implementations
-  storage/
-    api-keys.ts    # localStorage API key management
-  document/
-    pdf-parser.ts  # PDF text extraction using pdfjs-dist
-    chunker.ts     # Document chunking (fixed and semantic strategies)
+  execution/
+    parallel-runner.ts   # DAG execution engine (primary)
+    levels.ts            # Level grouping for parallel execution
+    route-evaluator.ts   # Router condition evaluation
+  providers/             # LLM provider abstractions
+  document/              # PDF parsing and chunking
+  storage/               # API key management
+  supabase/              # Optional Supabase client
+  topoSort.ts            # Topological sort
+  exportJSON.ts          # Workflow download
+  importJSON.ts          # Workflow file import
+  parseWorkflow.ts       # Pure workflow JSON parsing (testable)
 
 types/
   index.ts         # Type exports
@@ -380,7 +381,7 @@ State updates trigger React Flow re-renders for smooth visual transitions.
 ## Current Project Status
 
 ### Phase 1 - Complete ✅
-Multi-model LLM support, document processing, streaming, error recovery, and execution controls are fully implemented and tested. See `PHASE1_COMPLETE.md` for detailed implementation summary.
+Multi-model LLM support, document processing, streaming, error recovery, and execution controls are fully implemented and tested.
 
 Key features:
 - 4 LLM providers (OpenAI, Anthropic, Google AI, Ollama)
