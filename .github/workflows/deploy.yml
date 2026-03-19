@@ -1,0 +1,16 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+# Deployment is handled by Vercel's GitHub integration (see vercel.json).
+# Vercel detects the push to main and deploys automatically.
+# To migrate to manual deploys via Vercel CLI, add the deploy step here
+# and disable the GitHub integration in the Vercel dashboard.
+jobs:
+  note:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment triggered via Vercel GitHub integration
+        run: echo "Vercel will auto-deploy this push. See vercel.json for config."
