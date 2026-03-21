@@ -128,8 +128,17 @@ type ReviewDecisionResult = {
   editedContent?: string;
 };
 
+/**
+ * Per-invocation options for runParallel.
+ * Intended for compare-mode runs where all agent nodes should use a single provider override.
+ * Non-agent nodes (prompt, document, chunker, result, tool, loop) are unaffected by these options.
+ */
 export interface RunOptions {
-  /** When set, all agent nodes use this model string instead of their configured agentData.model. Format: "provider/model-id" */
+  /**
+   * When set, all agent nodes use this model string instead of their configured agentData.model.
+   * Format: "provider/model-id" (e.g. "anthropic/claude-3-5-sonnet-20241022").
+   * Must be a non-empty string with a "/" separator or an error will be thrown.
+   */
   providerOverride?: string
 }
 
@@ -195,6 +204,7 @@ async function executeNode(
         setLogs((logs) => logs.concat(`🤖 ${agentName} (${modelStr}) [MOCK]\n${output}`));
       } else {
         // Live mode: call real LLM provider
+        // resolvedModel intentionally has no sentinel fallback — live mode requires a valid "provider/model-id"
         const resolvedModel = context.options?.providerOverride ?? agentData.model;
         if (!resolvedModel || !resolvedModel.includes('/')) {
           throw new Error(`Invalid model format. Expected "provider/model-id"`);
