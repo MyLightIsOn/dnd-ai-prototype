@@ -8,10 +8,10 @@ describe('wordDiff', () => {
     expect(right.every(t => t.type === 'equal')).toBe(true)
   })
 
-  it('marks all tokens as left-only and right-only when strings share nothing', () => {
+  it('marks all non-whitespace tokens as left-only and right-only when strings share no words', () => {
     const { left, right } = wordDiff('foo bar', 'baz qux')
-    expect(left.every(t => t.type === 'left-only')).toBe(true)
-    expect(right.every(t => t.type === 'right-only')).toBe(true)
+    expect(left.filter(t => !/^\s+$/.test(t.text)).every(t => t.type === 'left-only')).toBe(true)
+    expect(right.filter(t => !/^\s+$/.test(t.text)).every(t => t.type === 'right-only')).toBe(true)
   })
 
   it('marks shared words as equal and unique words per side', () => {
@@ -36,7 +36,7 @@ describe('wordDiff', () => {
 
   it('handles one empty string', () => {
     const { left, right } = wordDiff('hello world', '')
-    expect(left.every(t => t.type === 'left-only')).toBe(true)
+    expect(left.filter(t => !/^\s+$/.test(t.text)).every(t => t.type === 'left-only')).toBe(true)
     expect(right).toHaveLength(0)
   })
 
@@ -52,8 +52,16 @@ describe('wordDiff', () => {
 
   it('computes partial divergence correctly', () => {
     // 'the fox' are shared (2 words), 'quick brown' left-only (2), 'slow green' right-only (2)
+    // totalUnique = 4 + 4 - 2 = 6, different = 2 + 2 = 4, divergencePct = round(4/6 * 100) = 67
     const { divergencePct } = wordDiff('the quick brown fox', 'the slow green fox')
-    expect(divergencePct).toBeGreaterThan(50)
-    expect(divergencePct).toBeLessThan(80)
+    expect(divergencePct).toBe(67)
+  })
+
+  it('correctly marks only one instance equal when a word is repeated', () => {
+    const { left } = wordDiff('fox fox', 'fox')
+    const equalCount = left.filter(t => t.type === 'equal' && t.text === 'fox').length
+    expect(equalCount).toBe(1)
+    const leftOnlyCount = left.filter(t => t.type === 'left-only' && t.text === 'fox').length
+    expect(leftOnlyCount).toBe(1)
   })
 })

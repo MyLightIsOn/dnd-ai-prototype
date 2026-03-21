@@ -17,8 +17,8 @@ export interface WordDiffResult {
 }
 
 /** Check if a token is whitespace */
-function isWhitespace(token: string): boolean {
-  return /^\s+$/.test(token)
+function isWhitespace(s: string): boolean {
+  return /^\s+$/.test(s)
 }
 
 /** Tokenise a string into words + whitespace runs */
@@ -26,25 +26,32 @@ function tokenise(text: string): string[] {
   return text.split(/(\s+)/).filter(t => t.length > 0)
 }
 
-/** O(m*n) LCS on token arrays (only comparing non-whitespace tokens) */
+/** O(m*n) LCS on token arrays */
 function lcs(a: string[], b: string[]): string[] {
   const m = a.length, n = b.length
   const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      const isEqual = !isWhitespace(a[i - 1]) && !isWhitespace(b[j - 1]) && a[i - 1] === b[j - 1]
-      dp[i][j] = isEqual ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1])
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1])
     }
   }
   const result: string[] = []
   let i = m, j = n
   while (i > 0 && j > 0) {
-    const isEqual = !isWhitespace(a[i - 1]) && !isWhitespace(b[j - 1]) && a[i - 1] === b[j - 1]
-    if (isEqual) { result.unshift(a[i - 1]); i--; j-- }
+    if (a[i - 1] === b[j - 1]) { result.unshift(a[i - 1]); i--; j-- }
     else if (dp[i - 1][j] >= dp[i][j - 1]) i--
     else j--
   }
   return result
+}
+
+/** Build a frequency map from a token array (used for count-based LCS matching) */
+function buildCountMap(tokens: string[]): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const t of tokens) {
+    map.set(t, (map.get(t) ?? 0) + 1)
+  }
+  return map
 }
 
 export function wordDiff(a: string, b: string): WordDiffResult {
@@ -55,54 +62,49 @@ export function wordDiff(a: string, b: string): WordDiffResult {
     return { left: [], right: [], divergencePct: 0 }
   }
 
-  const common = lcs(aTokens, bTokens)
-  const commonSet = new Set(common)
+  // LCS only on non-whitespace tokens
+  const aWords = aTokens.filter(t => !isWhitespace(t))
+  const bWords = bTokens.filter(t => !isWhitespace(t))
+  const common = lcs(aWords, bWords)
+  // common contains only non-whitespace tokens (lcs was run on aWords/bWords, not aTokens/bTokens)
 
-  // Build left tokens - mark whitespace as equal only if surrounding words match
+  // Build left tokens — consume from left count map
+  const leftCommon = buildCountMap(common)
   const left: DiffToken[] = []
-  for (let i = 0; i < aTokens.length; i++) {
-    const tok = aTokens[i]
-    const isWs = isWhitespace(tok)
-    let type: DiffTokenType = commonSet.has(tok) ? 'equal' : 'left-only'
-
-    if (isWs && !commonSet.has(tok)) {
-      // Check if both neighbors are equal or this is at a boundary with equal neighbors
-      const prevEqual = i === 0 || (i > 0 && commonSet.has(aTokens[i - 1]))
-      const nextEqual = i === aTokens.length - 1 || (i < aTokens.length - 1 && commonSet.has(aTokens[i + 1]))
-      if (prevEqual && nextEqual && aTokens.length === bTokens.length) {
-        type = 'equal'
+  for (const tok of aTokens) {
+    if (isWhitespace(tok)) {
+      left.push({ text: tok, type: 'equal' })  // whitespace always equal
+    } else {
+      const remaining = leftCommon.get(tok) ?? 0
+      if (remaining > 0) {
+        left.push({ text: tok, type: 'equal' })
+        leftCommon.set(tok, remaining - 1)
+      } else {
+        left.push({ text: tok, type: 'left-only' })
       }
     }
-
-    left.push({ text: tok, type })
   }
 
-  // Build right tokens - mark whitespace as equal only if surrounding words match
+  // Build right tokens — consume from right count map
+  const rightCommon = buildCountMap(common)
   const right: DiffToken[] = []
-  for (let i = 0; i < bTokens.length; i++) {
-    const tok = bTokens[i]
-    const isWs = isWhitespace(tok)
-    let type: DiffTokenType = commonSet.has(tok) ? 'equal' : 'right-only'
-
-    if (isWs && !commonSet.has(tok)) {
-      // Check if both neighbors are equal or this is at a boundary with equal neighbors
-      const prevEqual = i === 0 || (i > 0 && commonSet.has(bTokens[i - 1]))
-      const nextEqual = i === bTokens.length - 1 || (i < bTokens.length - 1 && commonSet.has(bTokens[i + 1]))
-      if (prevEqual && nextEqual && aTokens.length === bTokens.length) {
-        type = 'equal'
+  for (const tok of bTokens) {
+    if (isWhitespace(tok)) {
+      right.push({ text: tok, type: 'equal' })  // whitespace always equal
+    } else {
+      const remaining = rightCommon.get(tok) ?? 0
+      if (remaining > 0) {
+        right.push({ text: tok, type: 'equal' })
+        rightCommon.set(tok, remaining - 1)
+      } else {
+        right.push({ text: tok, type: 'right-only' })
       }
     }
-
-    right.push({ text: tok, type })
   }
 
-  // For divergence calculation, only count non-whitespace tokens
-  const aNonWs = aTokens.filter(t => !isWhitespace(t))
-  const bNonWs = bTokens.filter(t => !isWhitespace(t))
-  const commonNonWs = common
-
-  const totalUnique = aNonWs.length + bNonWs.length - commonNonWs.length
-  const different = (aNonWs.length - commonNonWs.length) + (bNonWs.length - commonNonWs.length)
+  // Jaccard distance: |symdiff| / |union| over non-whitespace tokens
+  const totalUnique = aWords.length + bWords.length - common.length
+  const different = (aWords.length - common.length) + (bWords.length - common.length)
   const divergencePct = totalUnique === 0 ? 0 : Math.round((different / totalUnique) * 100)
 
   return { left, right, divergencePct }
