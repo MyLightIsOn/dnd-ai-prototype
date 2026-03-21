@@ -1,15 +1,6 @@
 import React, { useRef, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-
-function formatLog(log: string) {
-  if (log.startsWith('🤖')) return <div className="text-blue-600">{log}</div>;
-  if (log.startsWith('📄')) return <div className="text-green-600">{log}</div>;
-  if (log.startsWith('💰')) return <div className="text-yellow-600">{log}</div>;
-  if (log.startsWith('❌')) return <div className="text-red-600">{log}</div>;
-  if (log.startsWith('✅')) return <div className="text-green-700">{log}</div>;
-  if (log.startsWith('⚠️')) return <div className="text-orange-600">{log}</div>;
-  return <div>{log}</div>;
-}
+import { formatLog } from './format-log';
 
 function Console({ logs, onClear }: { logs: string[]; onClear: () => void }) {
   const consoleRef = useRef<HTMLDivElement>(null);

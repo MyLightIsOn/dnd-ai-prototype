@@ -15,6 +15,9 @@ import { exportJSON } from "@/lib/exportJSON";
 import { importJSON } from "@/lib/importJSON";
 import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis, addKeywordRouter, addLLMJudgeRouter, addRefineLoop, addWebSearchSample, addCodeGenSample, addApiFetchSample, addDbReportSample, addResearchCodeSample } from "@/lib/addSample";
 import { runParallel as runLib, type ExecutionStatus } from "@/lib/execution/parallel-runner";
+import type { CompareProvider } from '@/lib/execution/compare-runner'
+import { runCompare } from '@/lib/execution/compare-runner'
+import { CompareConsole } from '@/components/compare-console'
 
 import type { TypedNode, NodeData } from "@/types";
 
@@ -32,6 +35,17 @@ export default function App() {
     message: string;
   } | null>(null);
   const errorRecoveryActionRef = useRef<'retry' | 'skip' | 'abort' | null>(null);
+
+  // Compare Mode state
+  const [compareMode, setCompareMode] = useState(false)
+  const [compareProviders, setCompareProviders] = useState<CompareProvider[]>([
+    { model: 'openai/gpt-4o', displayName: 'GPT-4o', isLocked: false },
+    { model: 'anthropic/claude-3-5-sonnet-20241022', displayName: 'Claude 3.5 Sonnet', isLocked: false },
+  ])
+  const [compareLogs, setCompareLogs] = useState<string[][]>([[], []])
+  const compareControlRefs = useRef<React.MutableRefObject<ExecutionStatus>[]>(
+    [{ current: 'idle' as ExecutionStatus }, { current: 'idle' as ExecutionStatus }]
+  )
 
   const selected = useMemo(
     () => nodes.find((n) => n.id === selectedId),
@@ -120,19 +134,47 @@ export default function App() {
     }
   };
 
+  const runCompareFn = async () => {
+    // Ensure we have one control ref per provider
+    while (compareControlRefs.current.length < compareProviders.length) {
+      compareControlRefs.current.push({ current: 'idle' as ExecutionStatus })
+    }
+    compareControlRefs.current = compareControlRefs.current.slice(0, compareProviders.length)
+
+    setExecutionStatus('running')
+    compareControlRefs.current.forEach(ref => { ref.current = 'running' })
+    setCompareLogs(compareProviders.map(() => []))
+
+    try {
+      await runCompare(
+        compareProviders,
+        nodes,
+        edges,
+        setCompareLogs,
+        compareControlRefs.current,
+      )
+    } finally {
+      setExecutionStatus('idle')
+      compareControlRefs.current.forEach(ref => { ref.current = 'idle' })
+    }
+  }
+
   const pause = () => {
-    setExecutionStatus('paused');
     executionControlRef.current = 'paused';
+    compareControlRefs.current.forEach(ref => { ref.current = 'paused' })
+    setExecutionStatus('paused');
   };
 
   const resume = () => {
     setExecutionStatus('running');
     executionControlRef.current = 'running';
+    compareControlRefs.current.forEach(ref => { ref.current = 'running' });
   };
 
   const cancel = () => {
-    setExecutionStatus('cancelled');
     executionControlRef.current = 'cancelled';
+    compareControlRefs.current.forEach(ref => { ref.current = 'cancelled' })
+    setExecutionStatus('cancelled');
 
     // Reset to idle after a brief moment
     setTimeout(() => {
@@ -165,7 +207,7 @@ export default function App() {
       <ReactFlowProvider>
         <div className="w-full h-[85vh] grid grid-cols-[260px_1fr_320px] grid-rows-[auto_1fr_auto] gap-4">
           <Header
-            onRun={run}
+            onRun={compareMode ? runCompareFn : run}
             onPause={pause}
             onResume={resume}
             onCancel={cancel}
@@ -181,6 +223,21 @@ export default function App() {
             }}
             onAddSample={addSample}
             onSettings={() => setSettingsOpen(true)}
+            compareMode={compareMode}
+            onToggleCompare={() => {
+              setCompareMode(m => !m)
+              setCompareLogs(compareProviders.map(() => []))
+            }}
+            compareProviders={compareProviders}
+            onChangeCompareProviders={(ps) => {
+              setCompareProviders(ps)
+              // Sync compareControlRefs to match new provider count
+              while (compareControlRefs.current.length < ps.length) {
+                compareControlRefs.current.push({ current: 'idle' as ExecutionStatus })
+              }
+              compareControlRefs.current = compareControlRefs.current.slice(0, ps.length)
+              setCompareLogs(ps.map(() => []))
+            }}
           />
           <Palette />
 
@@ -205,7 +262,15 @@ export default function App() {
           </div>
 
           <div className="col-span-3">
-            <Console logs={logs} onClear={() => setLogs([])} />
+            {compareMode ? (
+              <CompareConsole
+                providers={compareProviders}
+                logs={compareLogs}
+                onClear={() => setCompareLogs(compareProviders.map(() => []))}
+              />
+            ) : (
+              <Console logs={logs} onClear={() => setLogs([])} />
+            )}
           </div>
         </div>
 

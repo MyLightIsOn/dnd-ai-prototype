@@ -128,6 +128,20 @@ type ReviewDecisionResult = {
   editedContent?: string;
 };
 
+/**
+ * Per-invocation options for runParallel.
+ * Intended for compare-mode runs where all agent nodes should use a single provider override.
+ * Non-agent nodes (prompt, document, chunker, result, tool, loop) are unaffected by these options.
+ */
+export interface RunOptions {
+  /**
+   * When set, all agent nodes use this model string instead of their configured agentData.model.
+   * Format: "provider/model-id" (e.g. "anthropic/claude-3-5-sonnet-20241022").
+   * Must be a non-empty string with a "/" separator or an error will be thrown.
+   */
+  providerOverride?: string
+}
+
 interface NodeExecutionContext {
   nodesById: Record<Id, TypedNode>;
   incomingEdgesByNode: Record<Id, Id[]>;
@@ -141,6 +155,7 @@ interface NodeExecutionContext {
   auditLog: AuditLog;
   setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>;
   reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>;
+  options?: RunOptions;
 }
 
 /**
@@ -181,7 +196,7 @@ async function executeNode(
 
       const mode = agentData.mode || 'mock';
       const agentName = agentData.name || "Agent";
-      const modelStr = agentData.model || "model";
+      const modelStr = context.options?.providerOverride ?? agentData.model ?? "model";
 
       if (mode === 'mock') {
         // Mock mode
@@ -189,11 +204,13 @@ async function executeNode(
         setLogs((logs) => logs.concat(`🤖 ${agentName} (${modelStr}) [MOCK]\n${output}`));
       } else {
         // Live mode: call real LLM provider
-        if (!agentData.model || !agentData.model.includes('/')) {
+        // resolvedModel intentionally has no sentinel fallback — live mode requires a valid "provider/model-id"
+        const resolvedModel = context.options?.providerOverride ?? agentData.model;
+        if (!resolvedModel || !resolvedModel.includes('/')) {
           throw new Error(`Invalid model format. Expected "provider/model-id"`);
         }
 
-        const [providerName, modelId] = agentData.model.split('/', 2);
+        const [providerName, modelId] = resolvedModel.split('/', 2);
         const provider = getProvider(providerName);
 
         if (!provider) {
@@ -682,6 +699,7 @@ export async function runParallel(
   setCurrentError?: React.Dispatch<React.SetStateAction<{ nodeId: string; nodeName: string; message: string } | null>>,
   setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>,
   reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>,
+  options?: RunOptions,
 ): Promise<{ memory: MemoryManager; auditLog: AuditLog }> {
   // Create a workflow-scoped MemoryManager for this execution run
   const workflowMemory = new MemoryManager('workflow');
@@ -885,6 +903,7 @@ export async function runParallel(
       auditLog,
       setReviewRequest,
       reviewDecisionRef,
+      options,
     };
 
     // Execute all nodes in this level in parallel
