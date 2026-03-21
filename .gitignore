@@ -36,14 +36,15 @@ yarn-error.log*
 # vercel
 .vercel
 
+# worktrees
+.worktrees/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
-# worktrees
-.worktrees/
+# brainstorming sessions
+.superpowers/
 
 # local dev / IDE
 .idea/
-CLAUDE.md
-docs/

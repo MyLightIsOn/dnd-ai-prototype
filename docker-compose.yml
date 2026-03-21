@@ -1,0 +1,25 @@
+# docker-compose.yml — Local Postgres for self-hosting inference-sandbox
+# Requires Docker Desktop.
+#
+# Usage:
+#   docker-compose up -d
+#   # Schema is applied automatically via the init volume mount below
+#
+# For a full Supabase self-host (with Studio, auth, storage):
+#   https://supabase.com/docs/guides/self-hosting/docker
+
+services:
+  db:
+    image: supabase/postgres:15.1.0.117
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your-super-secret-password}
+      POSTGRES_DB: postgres
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d
+
+volumes:
+  db_data:
