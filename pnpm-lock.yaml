@@ -20,6 +20,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.99.2
         version: 2.99.2
+      '@webcontainer/api':
+        specifier: ^1.6.1
+        version: 1.6.1
       '@xyflow/react':
         specifier: ^12.8.6
         version: 12.8.6(@types/react@19.1.12)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -987,6 +990,9 @@ packages:
 
   '@vitest/utils@4.1.0':
     resolution: {integrity: sha512-XfPXT6a8TZY3dcGY8EdwsBulFCIw+BeeX0RZn2x/BtiY/75YGh8FeWGG8QISN/WhaqSrE2OrlDgtF8q5uhOTmw==}
+
+  '@webcontainer/api@1.6.1':
+    resolution: {integrity: sha512-2RS2KiIw32BY1Icf6M1DvqSmcon9XICZCDgS29QJb2NmF12ZY2V5Ia+949hMKB3Wno+P/Y8W+sPP59PZeXSELg==}
 
   '@xyflow/react@12.8.6':
     resolution: {integrity: sha512-SksAm2m4ySupjChphMmzvm55djtgMDPr+eovPDdTnyGvShf73cvydfoBfWDFllooIQ4IaiUL5yfxHRwU0c37EA==}
@@ -3319,6 +3325,8 @@ snapshots:
       '@vitest/pretty-format': 4.1.0
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
+
+  '@webcontainer/api@1.6.1': {}
 
   '@xyflow/react@12.8.6(@types/react@19.1.12)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:

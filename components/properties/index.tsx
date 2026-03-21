@@ -2,11 +2,18 @@ import React, { useState } from "react";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import type { AgentData, ToolData, OutputData, PromptData, DocumentData, ChunkerData, RouterData, NodeData } from "@/types";
+import type { LoopData } from "@/types/loop";
+import type { MemoryData } from "@/types/memory";
+import type { HumanReviewData } from "@/types/human-review";
 import type { TypedNode } from "@/types";
 import { getAllModels } from "@/lib/providers";
 import { DocumentProperties } from "./document-properties";
 import { ChunkerProperties } from "./chunker-properties";
 import { RouterProperties } from "./router-properties";
+import { LoopProperties } from "./loop-properties";
+import { MemoryProperties } from "./memory-properties";
+import { HumanReviewProperties } from "./human-review-properties";
+import { ToolProperties } from "./tool-properties";
 
 function PropertiesPanel({
   selected,
@@ -53,38 +60,38 @@ function PropertiesPanel({
         </>
       )}
       {type === "tool" && (
-        <>
-          <div className="grid gap-2">
-            <label className="text-xs text-gray-600">Kind</label>
-            <Input
-              value={(data as ToolData).kind || "http"}
-              onChange={(e) => onChange({ kind: e.target.value })}
-            />
-          </div>
-          <div className="grid gap-2">
-            <label className="text-xs text-gray-600">Endpoint</label>
-            <Input
-              value={(data as ToolData).config?.endpoint || ""}
-              onChange={(e) =>
-                onChange({
-                  config: {
-                    ...((data as ToolData).config || {}),
-                    endpoint: e.target.value,
-                  },
-                })
-              }
-            />
-          </div>
-        </>
+        <ToolProperties
+          data={data as ToolData}
+          onChange={onChange}
+        />
       )}
       {type === "result" && (
-        <div className="grid gap-2">
-          <label className="text-xs text-gray-600">Label</label>
-          <Input
-            value={data.name || "Output"}
-            onChange={(e) => onChange({ name: e.target.value })}
-          />
-        </div>
+        <>
+          <div className="grid gap-2">
+            <label className="text-xs text-gray-600">Label</label>
+            <Input
+              value={data.name || "Output"}
+              onChange={(e) => onChange({ name: e.target.value })}
+            />
+          </div>
+          <div className="grid gap-2">
+            <label className="text-xs text-gray-600">Output</label>
+            <div className="relative w-full">
+              <Textarea
+                rows={12}
+                value={(data as OutputData).preview || "(No output yet)"}
+                readOnly
+                className="font-mono text-xs bg-gray-50 resize-none"
+                placeholder="Output will appear here after execution..."
+              />
+            </div>
+            {(data as OutputData).preview && (
+              <div className="text-[10px] text-gray-500">
+                {(data as OutputData).preview!.length.toLocaleString()} characters
+              </div>
+            )}
+          </div>
+        </>
       )}
       {type === "document" && (
         <DocumentProperties
@@ -101,6 +108,24 @@ function PropertiesPanel({
       {type === "router" && (
         <RouterProperties
           data={data as RouterData}
+          onChange={onChange}
+        />
+      )}
+      {type === "loop" && (
+        <LoopProperties
+          data={data as LoopData}
+          onChange={onChange}
+        />
+      )}
+      {type === "memory" && (
+        <MemoryProperties
+          data={data as MemoryData}
+          onChange={onChange}
+        />
+      )}
+      {type === "human-review" && (
+        <HumanReviewProperties
+          data={data as HumanReviewData}
           onChange={onChange}
         />
       )}
@@ -262,6 +287,43 @@ function AgentProperties({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Memory Configuration */}
+      <div className="border-t pt-3 space-y-3">
+        <div className="text-xs font-medium text-gray-700">Memory</div>
+
+        {/* Memory Read Keys */}
+        <div className="grid gap-2">
+          <label className="text-xs text-gray-600">Read Keys (comma-separated)</label>
+          <Input
+            placeholder="key1, key2"
+            value={(data.memoryRead ?? []).join(', ')}
+            onChange={(e) => {
+              const keys = e.target.value
+                .split(',')
+                .map((k) => k.trim())
+                .filter((k) => k.length > 0);
+              onChange({ memoryRead: keys });
+            }}
+          />
+          <div className="text-[10px] text-gray-500">
+            Keys to read from memory before execution
+          </div>
+        </div>
+
+        {/* Memory Write Key */}
+        <div className="grid gap-2">
+          <label className="text-xs text-gray-600">Write Key</label>
+          <Input
+            placeholder="result_key"
+            value={data.memoryWrite ?? ''}
+            onChange={(e) => onChange({ memoryWrite: e.target.value || undefined })}
+          />
+          <div className="text-[10px] text-gray-500">
+            Key to write this agent&apos;s output into memory
+          </div>
+        </div>
       </div>
     </>
   );

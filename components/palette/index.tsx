@@ -25,8 +25,8 @@ function Pallette() {
         label="Tool"
         meta={{
           name: "Tool",
-          kind: "http",
-          config: { endpoint: "https://api.example.com" },
+          kind: "web-search",
+          config: { maxResults: 5 },
         }}
       />
       <PaletteItem
@@ -52,6 +52,33 @@ function Pallette() {
               condition: { type: "keyword", keywords: ["example"], matchMode: "any", caseSensitive: false }
             }
           ]
+        }}
+      />
+      <PaletteItem
+        type="loop"
+        label="Loop"
+        meta={{
+          name: "Loop",
+          maxIterations: 10,
+          currentIteration: 0
+        }}
+      />
+      <PaletteItem
+        type="memory"
+        label="Memory"
+        meta={{
+          name: "Memory",
+          scope: "workflow",
+          keys: [],
+        }}
+      />
+      <PaletteItem
+        type="human-review"
+        label="Human Review"
+        meta={{
+          name: "Human Review",
+          reviewMode: "approve-reject",
+          instructions: "",
         }}
       />
       <PaletteItem type="result" label="Result" meta={{ name: "Result" }} />

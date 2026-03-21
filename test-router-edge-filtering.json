@@ -1,0 +1,116 @@
+{
+  "nodes": [
+    {
+      "id": "prompt-1",
+      "type": "prompt",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "name": "Input Text",
+        "text": "This content is toxic and inappropriate",
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "router-1",
+      "type": "router",
+      "position": { "x": 400, "y": 200 },
+      "data": {
+        "name": "Content Moderator",
+        "strategy": "keyword",
+        "routes": [
+          {
+            "id": "route-toxic",
+            "label": "Toxic Path",
+            "condition": {
+              "type": "keyword",
+              "keywords": ["toxic", "inappropriate", "bad"],
+              "matchMode": "any",
+              "caseSensitive": false
+            }
+          },
+          {
+            "id": "route-safe",
+            "label": "Safe Path",
+            "condition": {
+              "type": "keyword",
+              "keywords": ["good", "great", "excellent"],
+              "matchMode": "any",
+              "caseSensitive": false
+            }
+          }
+        ],
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "agent-toxic",
+      "type": "agent",
+      "position": { "x": 750, "y": 100 },
+      "data": {
+        "name": "Toxic Filter",
+        "model": "openai/gpt-4o-mini",
+        "prompt": "This content was flagged as toxic. Generate a polite message explaining why this content cannot be processed.",
+        "mode": "mock",
+        "streaming": false,
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "agent-safe",
+      "type": "agent",
+      "position": { "x": 750, "y": 300 },
+      "data": {
+        "name": "Safe Processor",
+        "model": "openai/gpt-4o-mini",
+        "prompt": "This content is safe. Process it normally and provide a helpful response.",
+        "mode": "mock",
+        "streaming": false,
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "result-1",
+      "type": "result",
+      "position": { "x": 1100, "y": 200 },
+      "data": {
+        "name": "Final Output",
+        "preview": "",
+        "executionState": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "prompt-1",
+      "target": "router-1",
+      "markerEnd": { "type": "arrowclosed" }
+    },
+    {
+      "id": "edge-2",
+      "source": "router-1",
+      "sourceHandle": "route-toxic",
+      "target": "agent-toxic",
+      "markerEnd": { "type": "arrowclosed" }
+    },
+    {
+      "id": "edge-3",
+      "source": "router-1",
+      "sourceHandle": "route-safe",
+      "target": "agent-safe",
+      "markerEnd": { "type": "arrowclosed" }
+    },
+    {
+      "id": "edge-4",
+      "source": "agent-toxic",
+      "target": "result-1",
+      "markerEnd": { "type": "arrowclosed" }
+    },
+    {
+      "id": "edge-5",
+      "source": "agent-safe",
+      "target": "result-1",
+      "markerEnd": { "type": "arrowclosed" }
+    }
+  ]
+}

@@ -7,15 +7,16 @@ import PropertiesPanel from "@/components/properties";
 import Console from "@/components/console";
 import SettingsModal from "@/components/settings";
 import { ErrorDialog } from "@/components/error-dialog";
+import { WelcomeDialog } from "@/components/welcome-dialog";
 import { Settings } from "lucide-react";
 import React, { useMemo, useState, useRef } from "react";
 
 import { exportJSON } from "@/lib/exportJSON";
 import { importJSON } from "@/lib/importJSON";
-import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis } from "@/lib/addSample";
+import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis, addKeywordRouter, addLLMJudgeRouter, addRefineLoop, addWebSearchSample, addCodeGenSample, addApiFetchSample, addDbReportSample, addResearchCodeSample } from "@/lib/addSample";
 import { runParallel as runLib, type ExecutionStatus } from "@/lib/execution/parallel-runner";
 
-import type { AgentData, ToolData, OutputData, TypedNode, PromptData, DocumentData, ChunkerData, NodeData } from "@/types";
+import type { TypedNode, NodeData } from "@/types";
 
 export default function App() {
   const [nodes, setNodes] = useState<TypedNode[]>([]);
@@ -65,7 +66,7 @@ export default function App() {
     setSelectedId(null);
   };
 
-  const addSample = (sampleType: 'summarizer' | 'rag' | 'multi-agent') => {
+  const addSample = (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop' | 'web-search' | 'code-gen' | 'api-fetch' | 'db-report' | 'research-code') => {
     switch (sampleType) {
       case 'summarizer':
         addDocumentSummarizer(setNodes, setEdges);
@@ -76,6 +77,30 @@ export default function App() {
       case 'multi-agent':
         addMultiAgentAnalysis(setNodes, setEdges);
         break;
+      case 'keyword-router':
+        addKeywordRouter(setNodes, setEdges);
+        break;
+      case 'llm-judge-router':
+        addLLMJudgeRouter(setNodes, setEdges);
+        break;
+      case 'refine-loop':
+        addRefineLoop(setNodes, setEdges);
+        break;
+      case 'web-search':
+        addWebSearchSample(setNodes, setEdges);
+        break;
+      case 'code-gen':
+        addCodeGenSample(setNodes, setEdges);
+        break;
+      case 'api-fetch':
+        addApiFetchSample(setNodes, setEdges);
+        break;
+      case 'db-report':
+        addDbReportSample(setNodes, setEdges);
+        break;
+      case 'research-code':
+        addResearchCodeSample(setNodes, setEdges);
+        break;
     }
   };
 
@@ -85,7 +110,7 @@ export default function App() {
     executionControlRef.current = 'running';
     errorRecoveryActionRef.current = null;
 
-    await runLib(nodes, edges, setLogs, setNodes, executionControlRef, errorRecoveryActionRef, setCurrentError);
+    await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControlRef, errorRecoveryActionRef, setCurrentError);
 
     // Reset to idle after completion (unless already cancelled)
     const currentStatus = executionControlRef.current;
@@ -188,6 +213,8 @@ export default function App() {
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
         />
+
+        <WelcomeDialog />
 
         <ErrorDialog
           open={currentError !== null}

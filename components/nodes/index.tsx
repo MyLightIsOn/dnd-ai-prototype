@@ -5,6 +5,9 @@ import type { AgentData, ToolData, OutputData, PromptData } from "@/types";
 import { DocumentNode } from "./document-node";
 import { ChunkerNode } from "./chunker-node";
 import { RouterNode } from "./router-node";
+import { LoopNode } from "./loop-node";
+import { MemoryNode } from "./memory-node";
+import { HumanReviewNode } from "./human-review-node";
 
 function NodeChrome({
   title,
@@ -141,27 +144,61 @@ export const AgentNode: React.FC<NodeProps> = ({ data }) => {
             {d.streaming && <span>stream</span>}
           </div>
         ) : null}
+        {(d.memoryRead && d.memoryRead.length > 0 || d.memoryWrite) && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {d.memoryRead?.map((key) => (
+              <span key={key} className="text-[10px] bg-purple-900/50 text-purple-300 rounded px-1">
+                📖 {key}
+              </span>
+            ))}
+            {d.memoryWrite && (
+              <span className="text-[10px] bg-pink-900/50 text-pink-300 rounded px-1">
+                💾 {d.memoryWrite}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </NodeChrome>
   );
 };
 
+const TOOL_SUBTITLES: Record<string, string> = {
+  "web-search": "Web Search",
+  "code-exec": "Code Execution",
+  "http": "HTTP Request",
+  "database": "Database (Mock)",
+};
+
 export const ToolNode: React.FC<NodeProps> = ({ data }) => {
   const d = (data || {}) as ToolData;
+  const kind = d.kind ?? "web-search";
+  const subtitle = TOOL_SUBTITLES[kind] ?? kind;
+
+  // Show a brief config summary
+  let detail = "No config";
+  const cfg = d.config as Record<string, unknown> | undefined;
+  if (cfg) {
+    if (kind === "web-search" && (cfg as { maxResults?: number }).maxResults) {
+      detail = `${(cfg as { maxResults: number }).maxResults} results`;
+    } else if (kind === "http" && (cfg as { url?: string }).url) {
+      const url = (cfg as { url: string }).url;
+      detail = url.length > 30 ? url.slice(0, 30) + "…" : url;
+    } else if (kind === "code-exec" && (cfg as { code?: string }).code) {
+      detail = "JS code ready";
+    } else if (kind === "database" && (cfg as { query?: string }).query) {
+      detail = "SQL query set";
+    }
+  }
+
   return (
     <NodeChrome
       title={d.name || "Tool"}
-      subtitle={d.kind || "HTTP/DB/Code"}
+      subtitle={subtitle}
       color="bg-orange-600"
       executionState={d.executionState}
     >
-      <div className="text-gray-700">
-        {d.config?.endpoint ? (
-          <div className="text-[11px] break-all">{d.config.endpoint}</div>
-        ) : (
-          <div className="text-[11px]">No config</div>
-        )}
-      </div>
+      <div className="text-[11px] text-gray-700">{detail}</div>
     </NodeChrome>
   );
 };
@@ -175,7 +212,7 @@ export const ResultNode: React.FC<NodeProps> = ({ data }) => {
       color="bg-slate-600"
       executionState={d.executionState}
     >
-      <div className="text-[11px] text-gray-700 whitespace-pre-wrap max-h-24 overflow-auto ">
+      <div className="text-[11px] text-gray-700 whitespace-pre-wrap max-h-24 overflow-auto max-w-[300px]">
         {d.preview || "Will show the final result."}
       </div>
     </NodeChrome>
@@ -206,4 +243,7 @@ export const nodeTypes: NodeTypes = {
   document: DocumentNode,
   chunker: ChunkerNode,
   router: RouterNode,
+  loop: LoopNode,
+  memory: MemoryNode,
+  'human-review': HumanReviewNode,
 };
