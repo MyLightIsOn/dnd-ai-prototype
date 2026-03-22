@@ -1,4 +1,4 @@
-import React from 'react'
+import type React from 'react'
 import type { Edge } from '@xyflow/react'
 import type { TypedNode } from '@/types'
 import type { ExecutionStatus } from '@/lib/execution/parallel-runner'
@@ -46,6 +46,13 @@ export async function runCompare(
   setCompareLogs: React.Dispatch<React.SetStateAction<string[][]>>,
   executionControls: React.MutableRefObject<ExecutionStatus>[],
 ): Promise<void> {
+  if (executionControls.length < providers.length) {
+    throw new Error(
+      `runCompare: executionControls.length (${executionControls.length}) must be >= providers.length (${providers.length})`
+    )
+  }
+
+  // providers may be empty — Promise.allSettled([]) resolves immediately with no runs
   // Mutable log buffer — updated in place, then spread to trigger re-render
   const logsBuffer: string[][] = providers.map(() => [])
 
