@@ -38,7 +38,7 @@ describe('provider registry', () => {
     expect(models.length).toBeGreaterThan(0)
     const modelIds = models.map(m => m.id)
     expect(modelIds).toContain('gpt-4o')
-    expect(modelIds).toContain('claude-3-5-sonnet-20241022')
+    expect(modelIds).toContain('claude-sonnet-4-6')
     expect(modelIds).toContain('gemini-2.0-flash-exp')
   })
 })

@@ -40,7 +40,7 @@ export default function App() {
   const [compareMode, setCompareMode] = useState(false)
   const [compareProviders, setCompareProviders] = useState<CompareProvider[]>([
     { model: 'openai/gpt-4o', displayName: 'GPT-4o', isLocked: false },
-    { model: 'anthropic/claude-3-5-sonnet-20241022', displayName: 'Claude 3.5 Sonnet', isLocked: false },
+    { model: 'anthropic/claude-sonnet-4-6', displayName: 'Claude Sonnet 4.6', isLocked: false },
   ])
   const [compareLogs, setCompareLogs] = useState<string[][]>([[], []])
   const compareControlRefs = useRef<React.MutableRefObject<ExecutionStatus>[]>(
