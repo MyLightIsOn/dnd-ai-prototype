@@ -25,7 +25,7 @@ export function CompareConsole({ providers, logs, onClear }: CompareConsoleProps
   const [diffMode, setDiffMode] = useState<DiffMode | 'off'>('off')
   const [flipped, setFlipped] = useState(false)
 
-  const canDiff = providers.length >= 2
+  const canDiff = providers.length === 2
   const showDiff = diffMode !== 'off' && canDiff
 
   return (
@@ -88,7 +88,7 @@ export function CompareConsole({ providers, logs, onClear }: CompareConsoleProps
         <div className="flex flex-1 overflow-hidden overflow-x-auto">
           {providers.map((p, i) => (
             <ConsoleColumn
-              key={p.model}
+              key={`${p.model}-${i}`}
               provider={p.model}
               displayName={p.displayName}
               logs={logs[i] ?? []}

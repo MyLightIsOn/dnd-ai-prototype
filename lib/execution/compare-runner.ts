@@ -53,7 +53,9 @@ export async function runCompare(
   }
 
   // providers may be empty — Promise.allSettled([]) resolves immediately with no runs
-  // Mutable log buffer — updated in place, then spread to trigger re-render
+  // Mutable log buffer — updated in place, then spread to trigger re-render.
+  // Concurrent writes from multiple providers are safe because each provider
+  // exclusively writes to its own index slot (index = provider position).
   const logsBuffer: string[][] = providers.map(() => [])
 
   // No-op setters — we don't update visual node/edge state in compare mode

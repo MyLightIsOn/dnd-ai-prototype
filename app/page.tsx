@@ -168,6 +168,7 @@ export default function App() {
   const resume = () => {
     setExecutionStatus('running');
     executionControlRef.current = 'running';
+    compareControlRefs.current.forEach(ref => { ref.current = 'running' });
   };
 
   const cancel = () => {
