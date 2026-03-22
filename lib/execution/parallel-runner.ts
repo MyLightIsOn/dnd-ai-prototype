@@ -105,10 +105,12 @@ function buildMessages(agentData: AgentData, inputs: string[]): Message[] {
     });
   }
 
-  messages.push({
-    role: 'user',
-    content: agentData.prompt
-  });
+  if (agentData.prompt) {
+    messages.push({
+      role: 'user',
+      content: agentData.prompt
+    });
+  }
 
   return messages;
 }
