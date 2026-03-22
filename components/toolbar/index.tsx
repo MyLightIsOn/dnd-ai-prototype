@@ -2,6 +2,8 @@ import React, { useRef, useState, useEffect } from "react";
 import { Bug, Download, Play, Pause, SkipForward, X, Settings, Trash2, Upload, ChevronDown } from "lucide-react";
 import { Button } from "../ui/button";
 import type { ExecutionStatus } from "@/lib/execution/parallel-runner";
+import type { CompareProvider } from '@/lib/execution/compare-runner'
+import { CompareControls } from './compare-controls'
 
 function ToolBar({
   onRun,
@@ -14,6 +16,10 @@ function ToolBar({
   onImport,
   onAddSample,
   onSettings,
+  compareMode,
+  onToggleCompare,
+  compareProviders,
+  onChangeCompareProviders,
 }: {
   onRun: () => void | Promise<void>;
   onPause: () => void;
@@ -25,6 +31,10 @@ function ToolBar({
   onImport: React.ChangeEventHandler<HTMLInputElement>;
   onAddSample: (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop' | 'web-search' | 'code-gen' | 'api-fetch' | 'db-report' | 'research-code') => void;
   onSettings: () => void;
+  compareMode: boolean;
+  onToggleCompare: () => void;
+  compareProviders: CompareProvider[];
+  onChangeCompareProviders: (providers: CompareProvider[]) => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [showSampleMenu, setShowSampleMenu] = useState(false);
@@ -48,6 +58,7 @@ function ToolBar({
   }, [showSampleMenu]);
 
   return (
+    <div className="flex flex-col">
     <div className="flex items-center gap-2">
       {/* Run button - only show when idle */}
       {isIdle && (
@@ -238,6 +249,25 @@ function ToolBar({
       >
         <Settings size={16} /> Settings
       </Button>
+
+      {/* Compare toggle */}
+      <Button
+        variant={compareMode ? 'default' : 'outline'}
+        size="sm"
+        onClick={onToggleCompare}
+        className="text-xs"
+      >
+        Compare
+      </Button>
+    </div>
+    {compareMode && (
+      <div className="px-2 pb-2 border-t border-white/5 pt-2">
+        <CompareControls
+          providers={compareProviders}
+          onChange={onChangeCompareProviders}
+        />
+      </div>
+    )}
     </div>
   );
 }
