@@ -1,7 +1,12 @@
 {
   "name": "inference-sandbox",
   "version": "0.1.0",
-  "private": true,
+  "description": "A visual, node-based editor for designing, executing, and evaluating multi-agent AI workflows across multiple LLM providers.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MyLightIsOn/inference-sandbox.git"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
