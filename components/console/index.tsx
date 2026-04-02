@@ -1,8 +1,12 @@
+'use client';
 import React, { useRef, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatLog } from './format-log';
+import { useWorkflowStore } from '@/lib/store/workflow-store';
 
-function Console({ logs, onClear }: { logs: string[]; onClear: () => void }) {
+function Console() {
+  const logs = useWorkflowStore(s => s.logs);
+  const setLogs = useWorkflowStore(s => s.setLogs);
   const consoleRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
@@ -22,7 +26,7 @@ function Console({ logs, onClear }: { logs: string[]; onClear: () => void }) {
     <div className="bg-white border rounded-2xl p-3 h-40 flex flex-col text-xs">
       <div className="flex justify-between items-center mb-2">
         <div className="font-medium">Run Console</div>
-        <Button onClick={onClear} className="text-xs" variant="outline" size="sm">
+        <Button onClick={() => setLogs([])} className="text-xs" variant="outline" size="sm">
           Clear
         </Button>
       </div>

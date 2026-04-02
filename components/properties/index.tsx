@@ -1,3 +1,4 @@
+'use client';
 import React, { useState } from "react";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
@@ -5,7 +6,6 @@ import type { AgentData, ToolData, OutputData, PromptData, DocumentData, Chunker
 import type { LoopData } from "@/types/loop";
 import type { MemoryData } from "@/types/memory";
 import type { HumanReviewData } from "@/types/human-review";
-import type { TypedNode } from "@/types";
 import { getAllModels } from "@/lib/providers";
 import { DocumentProperties } from "./document-properties";
 import { ChunkerProperties } from "./chunker-properties";
@@ -14,14 +14,18 @@ import { LoopProperties } from "./loop-properties";
 import { MemoryProperties } from "./memory-properties";
 import { HumanReviewProperties } from "./human-review-properties";
 import { ToolProperties } from "./tool-properties";
+import { useSelectedNode } from "@/lib/store/selectors";
+import { useWorkflowStore } from "@/lib/store/workflow-store";
 
-function PropertiesPanel({
-  selected,
-  onChange,
-}: {
-  selected: TypedNode | null | undefined;
-  onChange: (patch: Partial<NodeData>) => void;
-}) {
+function PropertiesPanel() {
+  const selected = useSelectedNode();
+  const updateNodeData = useWorkflowStore(s => s.updateNodeData);
+
+  const onChange = (patch: Partial<NodeData>) => {
+    if (!selected) return;
+    updateNodeData(selected.id, patch);
+  };
+
   if (!selected)
     return (
       <div className="text-sm text-gray-500">
