@@ -11,3 +11,4 @@ export * from "./memory";
 export * from "./human-review";
 export * from "./run";
 export type { NodeStats, RunStats } from './stats'
+export type { Annotation } from './annotation'
