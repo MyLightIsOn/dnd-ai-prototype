@@ -3,6 +3,7 @@ import {
   registerNodeExecutor,
   getNodeExecutor,
   getAllNodeExecutors,
+  clearAllExecutors,
   type NodeExecutor,
   type NodeExecutionInput,
   type NodeExecutionResult,
@@ -19,32 +20,31 @@ function createMockExecutor(type: string): NodeExecutor {
 
 describe('NodeExecutor registry', () => {
   beforeEach(() => {
-    // Clear the registry before each test by getting all and then unregistering
-    // Actually, we can't unregister easily, so we'll just use unique names
+    clearAllExecutors();
   })
 
   it('registerNodeExecutor stores an executor', () => {
-    const executor = createMockExecutor('test-node-1')
+    const executor = createMockExecutor('prompt')
     registerNodeExecutor(executor)
-    expect(getNodeExecutor('test-node-1')).toBe(executor)
+    expect(getNodeExecutor('prompt')).toBe(executor)
   })
 
   it('getNodeExecutor retrieves by type', () => {
-    const executor = createMockExecutor('test-node-2')
+    const executor = createMockExecutor('agent')
     registerNodeExecutor(executor)
-    const retrieved = getNodeExecutor('test-node-2')
+    const retrieved = getNodeExecutor('agent')
     expect(retrieved).toBe(executor)
-    expect(retrieved?.type).toBe('test-node-2')
+    expect(retrieved?.type).toBe('agent')
   })
 
   it('getNodeExecutor returns undefined for unknown type', () => {
-    const result = getNodeExecutor('unknown-type-' + Date.now())
+    const result = getNodeExecutor('unknown')
     expect(result).toBeUndefined()
   })
 
   it('getAllNodeExecutors returns all registered executors', () => {
-    const executor1 = createMockExecutor('test-node-3')
-    const executor2 = createMockExecutor('test-node-4')
+    const executor1 = createMockExecutor('document')
+    const executor2 = createMockExecutor('tool')
 
     registerNodeExecutor(executor1)
     registerNodeExecutor(executor2)
@@ -52,15 +52,15 @@ describe('NodeExecutor registry', () => {
     const all = getAllNodeExecutors()
     const types = all.map((e) => e.type)
 
-    expect(types).toContain('test-node-3')
-    expect(types).toContain('test-node-4')
+    expect(types).toContain('document')
+    expect(types).toContain('tool')
   })
 
   it('registered executor can be invoked', async () => {
-    const executor = createMockExecutor('test-node-5')
+    const executor = createMockExecutor('chunker')
     registerNodeExecutor(executor)
 
-    const retrieved = getNodeExecutor('test-node-5')
+    const retrieved = getNodeExecutor('chunker')
     expect(retrieved).toBeDefined()
 
     // Create minimal context for testing
@@ -70,7 +70,7 @@ describe('NodeExecutor registry', () => {
 
     const input: NodeExecutionInput = {
       nodeId: 'node-1',
-      nodeType: 'test-node-5',
+      nodeType: 'chunker',
       nodeData: {},
       inputs: [],
       context: {
@@ -84,6 +84,6 @@ describe('NodeExecutor registry', () => {
     }
 
     const result = await retrieved!.execute(input)
-    expect(result.output).toBe('executed test-node-5')
+    expect(result.output).toBe('executed chunker')
   })
 })

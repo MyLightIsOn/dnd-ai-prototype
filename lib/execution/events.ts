@@ -24,15 +24,18 @@ export type ExecutionEvent =
 export class ExecutionEventEmitter {
   private listeners = new Map<string, Set<(event: ExecutionEvent) => void>>();
 
-  on(type: ExecutionEvent['type'], handler: (event: ExecutionEvent) => void): () => void {
+  on<T extends ExecutionEvent['type']>(
+    type: T,
+    handler: (event: Extract<ExecutionEvent, { type: T }>) => void
+  ): () => void {
     if (!this.listeners.has(type)) {
       this.listeners.set(type, new Set());
     }
-    this.listeners.get(type)!.add(handler);
+    this.listeners.get(type)!.add(handler as (event: ExecutionEvent) => void);
 
     // Return unsubscribe function
     return () => {
-      this.listeners.get(type)?.delete(handler);
+      this.listeners.get(type)?.delete(handler as (event: ExecutionEvent) => void);
     };
   }
 

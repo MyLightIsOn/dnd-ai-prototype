@@ -50,3 +50,7 @@ export function getNodeExecutor(type: string): NodeExecutor | undefined {
 export function getAllNodeExecutors(): NodeExecutor[] {
   return Array.from(executors.values());
 }
+
+export function clearAllExecutors(): void {
+  executors.clear();
+}

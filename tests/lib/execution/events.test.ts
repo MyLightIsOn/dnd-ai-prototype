@@ -6,9 +6,9 @@ describe('ExecutionEventEmitter', () => {
     const emitter = new ExecutionEventEmitter()
     const received: string[] = []
 
-    emitter.on('node:start', ((event: Extract<ExecutionEvent, { type: 'node:start' }>) => {
+    emitter.on('node:start', (event) => {
       received.push(event.nodeId)
-    }) as any)
+    })
 
     emitter.emit({ type: 'node:start', nodeId: 'node-1' })
     expect(received).toEqual(['node-1'])
@@ -18,9 +18,9 @@ describe('ExecutionEventEmitter', () => {
     const emitter = new ExecutionEventEmitter()
     const received: string[] = []
 
-    const unsubscribe = emitter.on('node:complete', ((event: Extract<ExecutionEvent, { type: 'node:complete' }>) => {
+    const unsubscribe = emitter.on('node:complete', (event) => {
       received.push(event.nodeId)
-    }) as any)
+    })
 
     emitter.emit({ type: 'node:complete', nodeId: 'node-1', output: 'result1' })
     expect(received).toEqual(['node-1'])
@@ -36,13 +36,13 @@ describe('ExecutionEventEmitter', () => {
     const received1: string[] = []
     const received2: string[] = []
 
-    emitter.on('node:error', ((event: Extract<ExecutionEvent, { type: 'node:error' }>) => {
+    emitter.on('node:error', (event) => {
       received1.push(event.nodeId)
-    }) as any)
+    })
 
-    emitter.on('node:error', ((event: Extract<ExecutionEvent, { type: 'node:error' }>) => {
+    emitter.on('node:error', (event) => {
       received2.push(event.error)
-    }) as any)
+    })
 
     emitter.emit({ type: 'node:error', nodeId: 'node-1', error: 'failed' })
 
@@ -54,13 +54,13 @@ describe('ExecutionEventEmitter', () => {
     const emitter = new ExecutionEventEmitter()
     const received: Array<{ type: string; count: number }> = []
 
-    emitter.on('node:start', (() => {
+    emitter.on('node:start', () => {
       received.push({ type: 'start', count: received.length + 1 })
-    }) as any)
+    })
 
-    emitter.on('node:complete', (() => {
+    emitter.on('node:complete', () => {
       received.push({ type: 'complete', count: received.length + 1 })
-    }) as any)
+    })
 
     emitter.emit({ type: 'node:start', nodeId: 'node-1' })
     expect(received.length).toBe(1)
