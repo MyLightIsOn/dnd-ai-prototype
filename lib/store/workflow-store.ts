@@ -2,8 +2,11 @@
 import { create } from 'zustand';
 import type { Edge } from '@xyflow/react';
 import type { TypedNode, NodeData, RunStats } from '@/types';
-import type { ExecutionStatus } from '@/lib/execution/parallel-runner';
+import type { ExecutionStatus, RunOptions, ExecutionEngine } from '@/lib/execution/parallel-runner';
+import { runParallel } from '@/lib/execution/parallel-runner';
+import { ExecutionEventEmitter } from '@/lib/execution/events';
 import type { CompareProvider } from '@/lib/execution/compare-runner';
+import type { LoopData } from '@/types';
 
 interface WorkflowState {
   // Graph
@@ -52,6 +55,7 @@ interface WorkflowState {
   setSettingsOpen: (open: boolean) => void;
   setCompareControls: (controls: Array<{ current: ExecutionStatus }>) => void;
   updateNodeData: (nodeId: string, patch: Partial<NodeData>) => void;
+  run: (options?: RunOptions) => Promise<void>;
 }
 
 export const initialWorkflowState = {
@@ -75,7 +79,94 @@ export const initialWorkflowState = {
   compareControls: [{ current: 'idle' as ExecutionStatus }, { current: 'idle' as ExecutionStatus }],
 };
 
-export const useWorkflowStore = create<WorkflowState>((set, _get) => ({
+/**
+ * Wire an ExecutionEventEmitter to store state setters.
+ * Returns a cleanup function that removes all subscriptions.
+ */
+function createStoreBridge(
+  emitter: ExecutionEventEmitter,
+  store: {
+    setLogs: WorkflowState['setLogs'];
+    setNodes: WorkflowState['setNodes'];
+    setEdges: WorkflowState['setEdges'];
+    setCurrentError: WorkflowState['setCurrentError'];
+  }
+): () => void {
+  const unsubs: Array<() => void> = [];
+
+  unsubs.push(emitter.on('log:append', (e) => {
+    if (e.type === 'log:append') store.setLogs(logs => [...logs, e.message]);
+  }));
+
+  unsubs.push(emitter.on('log:update', (e) => {
+    if (e.type === 'log:update') store.setLogs(logs => {
+      const updated = [...logs];
+      const idx = e.index === 'last' ? updated.length - 1 : e.index;
+      if (idx >= 0 && idx < updated.length) updated[idx] = e.message;
+      return updated;
+    });
+  }));
+
+  unsubs.push(emitter.on('node:start', (e) => {
+    if (e.type === 'node:start') store.setNodes(nodes => nodes.map(n =>
+      n.id === e.nodeId ? { ...n, data: { ...n.data, executionState: 'executing' as const } } : n
+    ));
+  }));
+
+  unsubs.push(emitter.on('node:complete', (e) => {
+    if (e.type === 'node:complete') store.setNodes(nodes => nodes.map(n =>
+      n.id === e.nodeId ? { ...n, data: { ...n.data, executionState: 'completed' as const } } : n
+    ));
+  }));
+
+  unsubs.push(emitter.on('node:error', (e) => {
+    if (e.type === 'node:error') store.setNodes(nodes => nodes.map(n =>
+      n.id === e.nodeId ? { ...n, data: { ...n.data, executionState: 'error' as const, executionError: e.error } } : n
+    ));
+  }));
+
+  unsubs.push(emitter.on('node:data', (e) => {
+    if (e.type === 'node:data') {
+      const { tokenData: _t, ...patch } = e.patch as Record<string, unknown>;
+      if (Object.keys(patch).length > 0) store.setNodes(nodes => nodes.map(n =>
+        n.id === e.nodeId ? { ...n, data: { ...n.data, ...patch } } : n
+      ));
+    }
+  }));
+
+  unsubs.push(emitter.on('edge:style', (e) => {
+    if (e.type === 'edge:style') {
+      store.setEdges(edges => edges.map(edge => {
+        const update = e.updates.find(u => u.edgeId === edge.id);
+        return update ? { ...edge, style: update.style, animated: update.animated } : edge;
+      }));
+    }
+  }));
+
+  unsubs.push(emitter.on('execution:cancelled', () => {
+    store.setNodes(nodes => nodes.map(n => ({
+      ...n,
+      data: { ...n.data, executionState: 'idle' as const }
+    })));
+  }));
+
+  unsubs.push(emitter.on('execution:error', () => {
+    store.setNodes(nodes => nodes.map(n => ({
+      ...n,
+      data: { ...n.data, executionState: 'idle' as const }
+    })));
+  }));
+
+  unsubs.push(emitter.on('error-recovery:request', (e) => {
+    if (e.type === 'error-recovery:request') {
+      store.setCurrentError({ nodeId: e.nodeId, nodeName: e.nodeName, message: e.message });
+    }
+  }));
+
+  return () => unsubs.forEach(fn => fn());
+}
+
+export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   ...initialWorkflowState,
 
   setNodes: (updater) => set(state => ({
@@ -106,4 +197,46 @@ export const useWorkflowStore = create<WorkflowState>((set, _get) => ({
       n.id === nodeId ? { ...n, data: { ...n.data, ...patch } as NodeData } : n
     ),
   })),
+
+  run: async (options?: RunOptions) => {
+    const { executionControl, errorRecoveryAction, setRunStats } = get();
+
+    // Pre-execution: clear logs, reset node/edge states
+    get().setLogs([]);
+    get().setNodes(get().nodes.map(node => {
+      const base = { ...node, data: { ...node.data, executionState: 'idle' as const, executionError: undefined } };
+      if (node.type === 'loop') {
+        return { ...base, data: { ...base.data, currentIteration: 0, executedExit: false } as LoopData & { executionState: 'idle'; executionError: undefined } };
+      }
+      return base;
+    }));
+    get().setEdges(get().edges.map(edge => ({
+      ...edge,
+      style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 1 },
+      animated: false,
+    })));
+
+    // Create emitter and bridge
+    const emitter = new ExecutionEventEmitter();
+    const cleanup = createStoreBridge(emitter, {
+      setLogs: get().setLogs,
+      setNodes: get().setNodes,
+      setEdges: get().setEdges,
+      setCurrentError: get().setCurrentError,
+    });
+
+    const engine: ExecutionEngine = {
+      emitter,
+      control: executionControl,
+      errorRecovery: errorRecoveryAction,
+      reviewDecision: { current: null },
+    };
+
+    try {
+      const { stats } = await runParallel(get().nodes, get().edges, engine, options);
+      setRunStats([stats]);
+    } finally {
+      cleanup();
+    }
+  },
 }));

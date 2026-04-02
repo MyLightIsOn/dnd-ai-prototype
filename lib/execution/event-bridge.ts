@@ -106,5 +106,21 @@ export function createReactBridge(
     }
   }));
 
+  // execution:cancelled — reset all nodes to idle
+  unsubs.push(emitter.on('execution:cancelled', (_e) => {
+    setNodes(nodes => nodes.map(n => ({
+      ...n,
+      data: { ...n.data, executionState: 'idle' as const }
+    })));
+  }));
+
+  // execution:error — same bulk reset (global iteration exceeded, etc.)
+  unsubs.push(emitter.on('execution:error', (_e) => {
+    setNodes(nodes => nodes.map(n => ({
+      ...n,
+      data: { ...n.data, executionState: 'idle' as const }
+    })));
+  }));
+
   return () => unsubs.forEach(fn => fn());
 }

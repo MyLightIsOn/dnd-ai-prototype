@@ -1,4 +1,3 @@
-import React from "react";
 import { topoSort } from "@/lib/topoSort";
 import type { Edge } from "@xyflow/react";
 import type { TypedNode, Id, RouterData, LoopData } from "@/types";
@@ -9,7 +8,6 @@ import { AuditLog } from "./audit-log";
 import '@/lib/execution/executors/index'; // register all executors
 import { getNodeExecutor } from './node-executor';
 import { ExecutionEventEmitter } from './events';
-import { createReactBridge } from './event-bridge';
 
 /**
  * Filters edges based on router and loop execution decisions.
@@ -87,14 +85,6 @@ function getActiveEdges(
 
 export type ExecutionStatus = 'idle' | 'running' | 'paused' | 'cancelled';
 
-type ReviewRequest = {
-  reviewerLabel: string;
-  nodeName: string;
-  instructions?: string;
-  content: string;
-  mode: 'approve-reject' | 'edit-and-approve';
-};
-
 type ReviewDecisionResult = {
   decision: 'approved' | 'rejected';
   editedContent?: string;
@@ -114,19 +104,27 @@ export interface RunOptions {
   providerOverride?: string
 }
 
+/**
+ * Execution engine: decoupled control objects and event emitter.
+ * Callers (UI, store, tests) provide this instead of 11 React setter parameters.
+ */
+export interface ExecutionEngine {
+  emitter: ExecutionEventEmitter;
+  control: { current: ExecutionStatus };
+  errorRecovery: { current: 'retry' | 'skip' | 'abort' | null };
+  reviewDecision: { current: ReviewDecisionResult | null };
+}
+
 interface NodeExecutionContext {
   nodesById: Record<Id, TypedNode>;
   incomingEdgesByNode: Record<Id, Id[]>;
   nodeOutputs: Record<Id, string>;
   loopIterations: Record<Id, number>;
   loopExited: Record<Id, boolean>;
-  setLogs: React.Dispatch<React.SetStateAction<string[]>>;
-  setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>;
-  executionControl?: React.MutableRefObject<ExecutionStatus>;
+  executionControl: { current: ExecutionStatus };
   workflowMemory: MemoryManager;
   auditLog: AuditLog;
-  setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>;
-  reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>;
+  reviewDecisionRef: { current: ReviewDecisionResult | null };
   options?: RunOptions;
   nodeStatsBuffer: NodeStats[];
   nodeTokenData: Record<string, { promptTokens: number; completionTokens: number; costUsd: number }>;
@@ -167,7 +165,7 @@ async function executeNode(
         workflowMemory,
         auditLog,
         emitter,
-        executionControl: executionControl ?? { current: 'running' as const },
+        executionControl,
         loopIterations,
         loopExited,
         reviewDecision: context.reviewDecisionRef,
@@ -222,57 +220,23 @@ function buildRunStats(buffer: NodeStats[], provider?: string): RunStats {
  * Executes the graph using level-based parallel execution.
  * Nodes within the same level (no dependencies on each other) run in parallel.
  * Levels execute sequentially.
+ *
+ * All React state interaction is removed — callers pass an ExecutionEngine
+ * (emitter + control refs) and subscribe to events via the emitter.
  */
 export async function runParallel(
   nodes: TypedNode[],
   edges: Edge[],
-  setLogs: React.Dispatch<React.SetStateAction<string[]>>,
-  setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>,
-  setEdges: React.Dispatch<React.SetStateAction<Edge[]>>,
-  executionControl?: React.MutableRefObject<ExecutionStatus>,
-  errorRecoveryAction?: React.MutableRefObject<'retry' | 'skip' | 'abort' | null>,
-  setCurrentError?: React.Dispatch<React.SetStateAction<{ nodeId: string; nodeName: string; message: string } | null>>,
-  setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>,
-  reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>,
+  engine: ExecutionEngine,
   options?: RunOptions,
 ): Promise<{ memory: MemoryManager; auditLog: AuditLog; stats: RunStats }> {
+  const { emitter, control: executionControl, errorRecovery: errorRecoveryAction, reviewDecision: reviewDecisionRef } = engine;
+
   // Create a workflow-scoped MemoryManager for this execution run
   const workflowMemory = new MemoryManager('workflow');
 
   // Create a fresh AuditLog for this execution run
   const auditLog = new AuditLog();
-
-  // Create event emitter and wire up React state bridge
-  const emitter = new ExecutionEventEmitter();
-  const cleanupBridge = createReactBridge(setLogs, setNodes, setEdges, setCurrentError, setReviewRequest as ((req: unknown) => void) | undefined, emitter);
-
-  // Clear previous logs
-  setLogs([]);
-
-  // Reset all nodes to idle state and clear loop counters
-  setNodes(nodes => nodes.map(node => {
-    if (node.type === 'loop') {
-      const loopData = node.data as LoopData;
-      return {
-        ...node,
-        data: {
-          ...loopData,
-          currentIteration: 0,
-          executedExit: false,
-          executionState: 'idle' as const,
-          executionError: undefined
-        }
-      };
-    }
-    return node;
-  }));
-
-  // Reset all edges to default style at start of run
-  setEdges(edges => edges.map(edge => ({
-    ...edge,
-    style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 1 },
-    animated: false
-  })));
 
   // Strip loop back-edges before topo-sort. Loop nodes intentionally create cycles
   // (body → loop) for iteration; the runner handles this itself. We find all nodes
@@ -323,10 +287,10 @@ export async function runParallel(
       })
       .join(', ');
 
-    setLogs((logs) => logs.concat(
+    emitter.emit({ type: 'log:append', message:
       `⚠️ Cycles detected in graph (nodes: ${cycleNames}). ` +
       `Execution will proceed with acyclic nodes.`
-    ));
+    });
   }
 
   // Build lookup maps
@@ -353,7 +317,7 @@ export async function runParallel(
   // Group nodes by dependency level
   let levels = groupNodesByLevel(topologicalOrder, edgesForSort);
 
-  setLogs((logs) => logs.concat(`🚀 Executing ${levels.length} level(s) with parallel nodes...`));
+  emitter.emit({ type: 'log:append', message: `🚀 Executing ${levels.length} level(s) with parallel nodes...` });
 
   const STEP_DELAY_MS = 200;
   const GLOBAL_ITERATION_LIMIT = 1000;
@@ -377,21 +341,17 @@ export async function runParallel(
   const nodeTokenData: Record<string, { promptTokens: number; completionTokens: number; costUsd: number }> = {};
 
   // Execute each level sequentially
-  try {
   for (let levelIndex = 0; levelIndex < levels.length; levelIndex++) {
     const level = levels[levelIndex];
 
     // Check global iteration limit
     globalIterationCount++;
     if (globalIterationCount > GLOBAL_ITERATION_LIMIT) {
-      setLogs((logs) => logs.concat(
+      emitter.emit({ type: 'log:append', message:
         `🚨 Global iteration limit exceeded (${GLOBAL_ITERATION_LIMIT}). ` +
         `This likely indicates an infinite loop. Aborting execution.`
-      ));
-      setNodes(nodes => nodes.map(n => ({
-        ...n,
-        data: { ...n.data, executionState: 'idle' as const }
-      })));
+      });
+      emitter.emit({ type: 'execution:error', message: 'Global iteration limit exceeded' });
       return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
     }
 
@@ -403,37 +363,31 @@ export async function runParallel(
     }
 
     // Check for cancellation
-    if (executionControl?.current === 'cancelled') {
-      setLogs((logs) => logs.concat("🛑 Execution cancelled."));
-      setNodes(nodes => nodes.map(n => ({
-        ...n,
-        data: { ...n.data, executionState: 'idle' as const }
-      })));
+    if (executionControl.current === 'cancelled') {
+      emitter.emit({ type: 'log:append', message: "🛑 Execution cancelled." });
+      emitter.emit({ type: 'execution:cancelled' });
       return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
     }
 
     // Check for pause
-    if (executionControl?.current === 'paused') {
-      setLogs((logs) => logs.concat("⏸️  Execution paused."));
+    if (executionControl.current === 'paused') {
+      emitter.emit({ type: 'log:append', message: "⏸️  Execution paused." });
 
-      while (executionControl?.current === 'paused') {
+      while (executionControl.current === 'paused') {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
-      if (executionControl?.current === 'cancelled') {
-        setLogs((logs) => logs.concat("🛑 Execution cancelled."));
-        setNodes(nodes => nodes.map(n => ({
-          ...n,
-          data: { ...n.data, executionState: 'idle' as const }
-        })));
+      if (executionControl.current === 'cancelled') {
+        emitter.emit({ type: 'log:append', message: "🛑 Execution cancelled." });
+        emitter.emit({ type: 'execution:cancelled' });
         return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
       }
 
-      setLogs((logs) => logs.concat("▶️  Execution resumed."));
+      emitter.emit({ type: 'log:append', message: "▶️  Execution resumed." });
     }
 
     if (nodesToExecute.length > 1) {
-      setLogs((logs) => logs.concat(`⚡ Level ${levelIndex + 1}: Executing ${nodesToExecute.length} nodes in parallel...`));
+      emitter.emit({ type: 'log:append', message: `⚡ Level ${levelIndex + 1}: Executing ${nodesToExecute.length} nodes in parallel...` });
     }
 
     const context: NodeExecutionContext = {
@@ -442,12 +396,9 @@ export async function runParallel(
       nodeOutputs,
       loopIterations,
       loopExited,
-      setLogs,
-      setNodes,
       executionControl,
       workflowMemory,
       auditLog,
-      setReviewRequest,
       reviewDecisionRef,
       options,
       nodeStatsBuffer,
@@ -512,15 +463,11 @@ export async function runParallel(
         const nodeName = nodeData.name || node.type || 'Unknown Node';
         const errorMessage = result.reason instanceof Error ? result.reason.message : String(result.reason);
 
-        setLogs((logs) => logs.concat(`❌ ${nodeName}: ${errorMessage}`));
+        emitter.emit({ type: 'log:append', message: `❌ ${nodeName}: ${errorMessage}` });
 
-        // If error recovery is enabled
-        if (setCurrentError && errorRecoveryAction) {
-          setCurrentError({
-            nodeId,
-            nodeName,
-            message: errorMessage
-          });
+        // If error recovery is available
+        if (errorRecoveryAction) {
+          emitter.emit({ type: 'error-recovery:request', nodeId, nodeName, message: errorMessage });
 
           // Wait for user decision
           while (errorRecoveryAction.current === null) {
@@ -531,12 +478,8 @@ export async function runParallel(
           errorRecoveryAction.current = null;
 
           if (action === 'abort') {
-            // Early return — bridge cleanup is guaranteed by the outer finally block
-            setLogs((logs) => logs.concat("🛑 Execution cancelled."));
-            setNodes(nodes => nodes.map(n => ({
-              ...n,
-              data: { ...n.data, executionState: 'idle' as const }
-            })));
+            emitter.emit({ type: 'log:append', message: "🛑 Execution cancelled." });
+            emitter.emit({ type: 'execution:cancelled' });
             return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
           }
           // For skip or retry, continue (retry logic would need level re-execution)
@@ -555,53 +498,35 @@ export async function runParallel(
       // Build set of active edge IDs for quick lookup
       const activeEdgeIds = new Set(activeEdges.map(e => e.id));
 
-      // Update edge styles: green/bold/animated for selected paths, gray/thin for non-selected
-      setEdges(currentEdges => currentEdges.map(edge => {
+      // Emit edge style updates
+      type EdgeStyleUpdate = { edgeId: string; style: object; animated: boolean };
+      const edgeStyleUpdates: EdgeStyleUpdate[] = [];
+      for (const edge of edges) {
         if (activeEdgeIds.has(edge.id)) {
-          // Selected path: green, bold, animated, full opacity
-          return {
-            ...edge,
-            style: { stroke: '#22c55e', strokeWidth: 2, opacity: 1 },
-            animated: true
-          };
+          edgeStyleUpdates.push({ edgeId: edge.id, style: { stroke: '#22c55e', strokeWidth: 2, opacity: 1 }, animated: true });
         } else {
-          // Check if this edge comes from a router or loop that has executed
           const sourceNode = nodesById[edge.source as Id];
           if (sourceNode) {
             if (sourceNode.type === 'router') {
               const routerData = sourceNode.data as RouterData;
               if (routerData.executedRoute) {
-                // Non-selected path from executed router: gray, thin, dimmed, not animated
-                return {
-                  ...edge,
-                  style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
-                  animated: false
-                };
+                edgeStyleUpdates.push({ edgeId: edge.id, style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 }, animated: false });
               }
             } else if (sourceNode.type === 'loop') {
               const loopData = sourceNode.data as LoopData;
-              // Dim the non-selected loop edge
               if (edge.sourceHandle === 'continue' && loopData.executedExit) {
-                // Continue edge when loop exited: dimmed
-                return {
-                  ...edge,
-                  style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
-                  animated: false
-                };
+                edgeStyleUpdates.push({ edgeId: edge.id, style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 }, animated: false });
               } else if (edge.sourceHandle === 'exit' && !loopData.executedExit) {
-                // Exit edge when loop continuing: dimmed
-                return {
-                  ...edge,
-                  style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
-                  animated: false
-                };
+                edgeStyleUpdates.push({ edgeId: edge.id, style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 }, animated: false });
               }
             }
           }
-          // Edge not from an executed router/loop: keep current style
-          return edge;
         }
-      }));
+      }
+
+      if (edgeStyleUpdates.length > 0) {
+        emitter.emit({ type: 'edge:style', updates: edgeStyleUpdates });
+      }
 
       // Update incoming edges map with filtered edges
       // Reset for all nodes first
@@ -686,20 +611,17 @@ export async function runParallel(
         ];
 
         if (hasRouterInLevel && hasLoopInLevel) {
-          setLogs((logs) => logs.concat(`🔀 Recalculated execution path based on router and loop decisions`));
+          emitter.emit({ type: 'log:append', message: `🔀 Recalculated execution path based on router and loop decisions` });
         } else if (hasRouterInLevel) {
-          setLogs((logs) => logs.concat(`🔀 Recalculated execution path based on router decisions`));
+          emitter.emit({ type: 'log:append', message: `🔀 Recalculated execution path based on router decisions` });
         } else {
-          setLogs((logs) => logs.concat(`🔁 Recalculated execution path based on loop decisions`));
+          emitter.emit({ type: 'log:append', message: `🔁 Recalculated execution path based on loop decisions` });
         }
       }
     }
   }
 
-  setLogs((logs) => logs.concat("✅ Done."));
+  emitter.emit({ type: 'log:append', message: "✅ Done." });
 
   return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
-  } finally {
-    cleanupBridge();
-  }
 }
