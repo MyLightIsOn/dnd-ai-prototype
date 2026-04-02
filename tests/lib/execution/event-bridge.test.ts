@@ -100,6 +100,17 @@ describe('createReactBridge', () => {
     expect(result).toEqual(['a', 'b']);
   });
 
+  it('log:update with last on empty array is a no-op', () => {
+    createReactBridge(setLogs, setNodes, setEdges, setCurrentError, setReviewRequest, emitter);
+
+    emitter.emit({ type: 'log:update', index: 'last', message: 'x' });
+
+    expect(setLogsMock).toHaveBeenCalledOnce();
+    const updater = getUpdater(setLogsMock);
+    const result = updater([]);
+    expect(result).toEqual([]);
+  });
+
   it('node:start calls setNodes with executionState "executing"', () => {
     createReactBridge(setLogs, setNodes, setEdges, setCurrentError, setReviewRequest, emitter);
 
@@ -140,7 +151,7 @@ describe('createReactBridge', () => {
     expect(result[1].data.executionState).toBe('idle');
   });
 
-  it('node:data merges patch into node data but not tokenData', () => {
+  it('node:data merges patch into node data', () => {
     createReactBridge(setLogs, setNodes, setEdges, setCurrentError, setReviewRequest, emitter);
 
     emitter.emit({
@@ -148,7 +159,6 @@ describe('createReactBridge', () => {
       nodeId: 'n1',
       patch: {
         preview: 'some preview',
-        tokenData: { n1: { promptTokens: 100, completionTokens: 50, costUsd: 0.01 } },
       },
     });
 
@@ -157,22 +167,19 @@ describe('createReactBridge', () => {
     const nodes = [makeNode('n1'), makeNode('n2')];
     const result = updater(nodes);
     expect(result[0].data.preview).toBe('some preview');
-    expect(result[0].data).not.toHaveProperty('tokenData');
     expect(result[1].data).not.toHaveProperty('preview');
   });
 
-  it('node:data with only tokenData in patch does not call setNodes', () => {
+  it('node:data with empty patch does not call setNodes', () => {
     createReactBridge(setLogs, setNodes, setEdges, setCurrentError, setReviewRequest, emitter);
 
     emitter.emit({
       type: 'node:data',
       nodeId: 'n1',
-      patch: {
-        tokenData: { n1: { promptTokens: 100, completionTokens: 50, costUsd: 0.01 } },
-      },
+      patch: {},
     });
 
-    // setNodes should not be called because nodePatch is empty after removing tokenData
+    // setNodes should not be called because patch is empty
     expect(setNodesMock).not.toHaveBeenCalled();
   });
 

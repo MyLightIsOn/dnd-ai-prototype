@@ -531,6 +531,7 @@ export async function runParallel(
           errorRecoveryAction.current = null;
 
           if (action === 'abort') {
+            // Early return — bridge cleanup is guaranteed by the outer finally block
             setLogs((logs) => logs.concat("🛑 Execution cancelled."));
             setNodes(nodes => nodes.map(n => ({
               ...n,

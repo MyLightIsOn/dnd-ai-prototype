@@ -46,7 +46,7 @@ export function createReactBridge(
     }
   }));
 
-  // node:complete — set executionState to 'completed', apply dataPatch
+  // node:complete — set executionState to 'completed' (dataPatch was already applied via node:data before this event)
   unsubs.push(emitter.on('node:complete', (e) => {
     if (e.type === 'node:complete') {
       setNodes(nodes => nodes.map(n =>
@@ -69,15 +69,13 @@ export function createReactBridge(
   }));
 
   // node:data — merge patch into node data (handles dataPatch from executors)
-  // Special case: tokenData is NOT merged into node.data (it's for stats tracking only)
+  // Note: tokenData is already stripped in parallel-runner before emitting this event
   unsubs.push(emitter.on('node:data', (e) => {
     if (e.type === 'node:data') {
-      // Extract tokenData separately (handled by caller via node output stats)
-      const { tokenData: _tokenData, ...nodePatch } = e.patch as { tokenData?: unknown; [key: string]: unknown };
-      if (Object.keys(nodePatch).length > 0) {
+      if (Object.keys(e.patch).length > 0) {
         setNodes(nodes => nodes.map(n =>
           n.id === e.nodeId
-            ? { ...n, data: { ...n.data, ...nodePatch } }
+            ? { ...n, data: { ...n.data, ...e.patch } }
             : n
         ));
       }
