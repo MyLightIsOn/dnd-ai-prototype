@@ -21,11 +21,16 @@ import type {
 } from "@xyflow/react";
 
 import React from "react";
-import { nodeTypes } from "@/components/nodes";
+// Register all built-in node types before calling getNodeTypesMap()
+import '@/lib/node-types/built-in/index';
+import { getNodeTypesMap } from '@/lib/node-types/registry';
 import type { TypedNode } from "@/types";
 import { detectMemoryConnections } from "@/lib/execution/memory-connections";
 import { MemoryOverlay } from "./memory-overlay";
 import { useWorkflowStore } from "@/lib/store/workflow-store";
+
+// Get the node types map from the registry (populated by built-in side-effect imports)
+const nodeTypes = getNodeTypesMap();
 
 function ViewPort() {
   const nodes = useWorkflowStore(s => s.nodes);

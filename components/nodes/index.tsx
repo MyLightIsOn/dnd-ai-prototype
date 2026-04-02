@@ -1,4 +1,3 @@
-import type { NodeTypes } from "@xyflow/react";
 import { DocumentNode } from "./document-node";
 import { ChunkerNode } from "./chunker-node";
 import { RouterNode } from "./router-node";
@@ -21,16 +20,3 @@ export { RouterNode } from "./router-node";
 export { LoopNode } from "./loop-node";
 export { MemoryNode } from "./memory-node";
 export { HumanReviewNode } from "./human-review-node";
-
-export const nodeTypes: NodeTypes = {
-  agent: AgentNode,
-  tool: ToolNode,
-  result: ResultNode,
-  prompt: PromptNode,
-  document: DocumentNode,
-  chunker: ChunkerNode,
-  router: RouterNode,
-  loop: LoopNode,
-  memory: MemoryNode,
-  humanReview: HumanReviewNode,
-};
