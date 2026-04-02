@@ -146,7 +146,7 @@ export default function App() {
     setCompareLogs(compareProviders.map(() => []))
 
     try {
-      await runCompare(
+      const _compareStats = await runCompare(
         compareProviders,
         nodes,
         edges,

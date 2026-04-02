@@ -1,6 +1,7 @@
 import type React from 'react'
 import type { Edge } from '@xyflow/react'
 import type { TypedNode } from '@/types'
+import type { RunStats } from '@/types'
 import type { ExecutionStatus } from '@/lib/execution/parallel-runner'
 import { runParallel } from '@/lib/execution/parallel-runner'
 
@@ -45,7 +46,7 @@ export async function runCompare(
   edges: Edge[],
   setCompareLogs: React.Dispatch<React.SetStateAction<string[][]>>,
   executionControls: React.MutableRefObject<ExecutionStatus>[],
-): Promise<void> {
+): Promise<RunStats[]> {
   if (executionControls.length < providers.length) {
     throw new Error(
       `runCompare: executionControls.length (${executionControls.length}) must be >= providers.length (${providers.length})`
@@ -62,7 +63,7 @@ export async function runCompare(
   const noopSetNodes: React.Dispatch<React.SetStateAction<TypedNode[]>> = () => {}
   const noopSetEdges: React.Dispatch<React.SetStateAction<Edge[]>> = () => {}
 
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     providers.map((provider, i) =>
       runParallel(
         nodes,
@@ -79,4 +80,17 @@ export async function runCompare(
       )
     )
   )
+
+  return results.map((result, i) => {
+    if (result.status === 'fulfilled') return result.value.stats
+    return {
+      provider: providers[i].model,
+      totalLatencyMs: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      totalCostUsd: 0,
+      nodes: [],
+    } satisfies RunStats
+  })
 }
