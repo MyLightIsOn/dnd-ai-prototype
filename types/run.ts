@@ -7,6 +7,8 @@ export interface StoredRunOutput {
   promptTokens: number
   completionTokens: number
   costUsd: number
+  latencyMs: number
+  status: 'completed' | 'error' | 'skipped'
 }
 
 /** A completed workflow run, stored for later annotation (Phase 2). */
