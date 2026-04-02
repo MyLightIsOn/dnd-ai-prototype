@@ -124,7 +124,7 @@ export default function App() {
     executionControlRef.current = 'running';
     errorRecoveryActionRef.current = null;
 
-    await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControlRef, errorRecoveryActionRef, setCurrentError);
+    const { memory: _memory, auditLog: _auditLog, stats: _stats } = await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControlRef, errorRecoveryActionRef, setCurrentError);
 
     // Reset to idle after completion (unless already cancelled)
     const currentStatus = executionControlRef.current;

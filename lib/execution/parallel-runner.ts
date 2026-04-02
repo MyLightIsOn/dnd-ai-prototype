@@ -2,6 +2,7 @@ import React from "react";
 import { topoSort } from "@/lib/topoSort";
 import type { Edge } from "@xyflow/react";
 import type { AgentData, ToolData, TypedNode, Id, ChunkerData, RouterData, LoopData, PromptData } from "@/types";
+import type { NodeStats, RunStats } from '@/types'
 import type { DocumentData } from "@/types/document";
 import type { MemoryData } from "@/types/memory";
 import type { HumanReviewData, ReviewDecision } from "@/types/human-review";
@@ -158,6 +159,8 @@ interface NodeExecutionContext {
   setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>;
   reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>;
   options?: RunOptions;
+  nodeStatsBuffer: NodeStats[];
+  nodeTokenData: Record<string, { promptTokens: number; completionTokens: number; costUsd: number }>;
 }
 
 /**
@@ -268,6 +271,11 @@ async function executeNode(
                 updated[logIndex] = `🤖 ${agentName} (${modelStr})\n${accumulatedOutput}\n💰 Cost: $${cost.toFixed(6)} | Tokens: ${chunk.usage!.totalTokens}`;
                 return updated;
               });
+              context.nodeTokenData[nodeId] = {
+                promptTokens: chunk.usage.inputTokens ?? 0,
+                completionTokens: chunk.usage.outputTokens ?? 0,
+                costUsd: cost,
+              };
             }
           }
 
@@ -288,6 +296,11 @@ async function executeNode(
           const logText = `🤖 ${agentName} (${modelStr})\n${response.content}\n💰 Cost: $${cost.toFixed(6)} | Tokens: ${response.usage.totalTokens}`;
 
           output = response.content;
+          context.nodeTokenData[nodeId] = {
+            promptTokens: response.usage.inputTokens ?? 0,
+            completionTokens: response.usage.outputTokens ?? 0,
+            costUsd: cost,
+          };
           setLogs((logs) => {
             const updated = [...logs];
             updated[updated.length - 1] = logText;
@@ -686,6 +699,25 @@ async function executeNode(
 }
 
 /**
+ * Build a RunStats summary from per-node stats collected during execution.
+ */
+function buildRunStats(buffer: NodeStats[], provider?: string): RunStats {
+  const totalLatencyMs = buffer.reduce((sum, n) => sum + n.latencyMs, 0);
+  const promptTokens = buffer.reduce((sum, n) => sum + n.promptTokens, 0);
+  const completionTokens = buffer.reduce((sum, n) => sum + n.completionTokens, 0);
+  const totalCostUsd = buffer.reduce((sum, n) => sum + n.costUsd, 0);
+  return {
+    provider: provider ?? '',
+    totalLatencyMs,
+    promptTokens,
+    completionTokens,
+    totalTokens: promptTokens + completionTokens,
+    totalCostUsd,
+    nodes: [...buffer],
+  };
+}
+
+/**
  * Executes the graph using level-based parallel execution.
  * Nodes within the same level (no dependencies on each other) run in parallel.
  * Levels execute sequentially.
@@ -702,7 +734,7 @@ export async function runParallel(
   setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>,
   reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>,
   options?: RunOptions,
-): Promise<{ memory: MemoryManager; auditLog: AuditLog }> {
+): Promise<{ memory: MemoryManager; auditLog: AuditLog; stats: RunStats }> {
   // Create a workflow-scoped MemoryManager for this execution run
   const workflowMemory = new MemoryManager('workflow');
 
@@ -833,6 +865,12 @@ export async function runParallel(
   // Track global iteration count to prevent infinite loops
   let globalIterationCount = 0;
 
+  // Per-node stats accumulator (populated after each level's Promise.allSettled)
+  const nodeStatsBuffer: NodeStats[] = [];
+
+  // Side channel for token/cost data from agent execution
+  const nodeTokenData: Record<string, { promptTokens: number; completionTokens: number; costUsd: number }> = {};
+
   // Execute each level sequentially
   for (let levelIndex = 0; levelIndex < levels.length; levelIndex++) {
     const level = levels[levelIndex];
@@ -848,7 +886,7 @@ export async function runParallel(
         ...n,
         data: { ...n.data, executionState: 'idle' as const }
       })));
-      return { memory: workflowMemory, auditLog };
+      return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
     }
 
     // Skip nodes that have already been executed
@@ -865,7 +903,7 @@ export async function runParallel(
         ...n,
         data: { ...n.data, executionState: 'idle' as const }
       })));
-      return { memory: workflowMemory, auditLog };
+      return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
     }
 
     // Check for pause
@@ -882,7 +920,7 @@ export async function runParallel(
           ...n,
           data: { ...n.data, executionState: 'idle' as const }
         })));
-        return { memory: workflowMemory, auditLog };
+        return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
       }
 
       setLogs((logs) => logs.concat("▶️  Execution resumed."));
@@ -906,11 +944,17 @@ export async function runParallel(
       setReviewRequest,
       reviewDecisionRef,
       options,
+      nodeStatsBuffer,
+      nodeTokenData,
     };
 
     // Execute all nodes in this level in parallel
+    const nodeStartTimes: Record<string, number> = {};
     const results = await Promise.allSettled(
-      nodesToExecute.map(nodeId => executeNode(nodeId, context))
+      nodesToExecute.map(async (nodeId) => {
+        nodeStartTimes[nodeId] = Date.now();
+        return executeNode(nodeId, context);
+      })
     );
 
     // Track if this level contains any router or loop nodes
@@ -924,6 +968,24 @@ export async function runParallel(
 
       // Mark node as executed
       executedNodes.add(nodeId);
+
+      // Capture per-node stats
+      const latencyMs = Date.now() - (nodeStartTimes[nodeId] ?? Date.now());
+      const nodeForStats = nodesById[nodeId];
+      const tokenData = context.nodeTokenData[nodeId];
+      context.nodeStatsBuffer.push({
+        nodeId,
+        nodeName: (nodeForStats?.data as { name?: string })?.name ?? nodeId,
+        nodeType: nodeForStats?.type ?? 'unknown',
+        status: result.status === 'fulfilled' ? 'completed' : 'error',
+        latencyMs,
+        promptTokens: tokenData?.promptTokens ?? 0,
+        completionTokens: tokenData?.completionTokens ?? 0,
+        costUsd: tokenData?.costUsd ?? 0,
+        errorMessage: result.status === 'rejected'
+          ? (result.reason instanceof Error ? result.reason.message : String(result.reason))
+          : undefined,
+      });
 
       // Check if this node is a router or loop
       const node = nodesById[nodeId];
@@ -967,7 +1029,7 @@ export async function runParallel(
               ...n,
               data: { ...n.data, executionState: 'idle' as const }
             })));
-            return { memory: workflowMemory, auditLog };
+            return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
           }
           // For skip or retry, continue (retry logic would need level re-execution)
           // For now, we skip failed nodes and continue
@@ -1128,5 +1190,5 @@ export async function runParallel(
 
   setLogs((logs) => logs.concat("✅ Done."));
 
-  return { memory: workflowMemory, auditLog };
+  return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
 }
