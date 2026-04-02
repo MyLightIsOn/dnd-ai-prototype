@@ -1,7 +1,9 @@
 export type ReviewRequest = {
+  reviewerLabel: string;
+  nodeName: string;
+  instructions?: string;
   content: string;
-  reviewers: string[];
-  approvalRule: string;
+  mode: 'approve-reject' | 'edit-and-approve';
 };
 
 export type ExecutionEvent =

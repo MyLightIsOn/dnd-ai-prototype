@@ -4,9 +4,23 @@ import type { AuditLog } from './audit-log';
 
 export type ExecutionStatus = 'idle' | 'running' | 'paused' | 'cancelled';
 
+export type ReviewDecisionResult = {
+  decision: 'approved' | 'rejected';
+  editedContent?: string;
+};
+
+export type ReviewRequest = {
+  reviewerLabel: string;
+  nodeName: string;
+  instructions?: string;
+  content: string;
+  mode: 'approve-reject' | 'edit-and-approve';
+};
+
 export interface RunOptions {
   compareMode?: boolean;
   compareIndex?: number;
+  providerOverride?: string;
 }
 
 export interface NodeExecutionInput {
@@ -25,6 +39,7 @@ export interface ExecutorContext {
   loopIterations: Record<string, number>;
   loopExited: Record<string, boolean>;
   options?: RunOptions;
+  reviewDecision?: { current: ReviewDecisionResult | null };
 }
 
 export interface NodeExecutionResult {
