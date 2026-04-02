@@ -11,7 +11,7 @@ export type ExecutionEvent =
   | { type: 'node:complete'; nodeId: string; output: string }
   | { type: 'node:error'; nodeId: string; error: string }
   | { type: 'log:append'; message: string }
-  | { type: 'log:update'; index: number; message: string }
+  | { type: 'log:update'; index: number | 'last'; message: string }
   | { type: 'node:data'; nodeId: string; patch: Record<string, unknown> }
   | { type: 'edge:style'; updates: Array<{ edgeId: string; style: object; animated: boolean }> }
   | { type: 'execution:start'; levelCount: number }

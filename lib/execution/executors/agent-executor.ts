@@ -87,7 +87,7 @@ const agentExecutor: NodeExecutor = {
 
         context.emitter.emit({
           type: 'log:update',
-          index: -1,
+          index: 'last',
           message: `🤖 ${agentName} (${modelStr})\n${accumulatedOutput}${chunk.done ? '' : '▌'}`,
         });
 
@@ -95,7 +95,7 @@ const agentExecutor: NodeExecutor = {
           const cost = provider.calculateCost(modelId, chunk.usage);
           context.emitter.emit({
             type: 'log:update',
-            index: -1,
+            index: 'last',
             message: `🤖 ${agentName} (${modelStr})\n${accumulatedOutput}\n💰 Cost: $${cost.toFixed(6)} | Tokens: ${chunk.usage.totalTokens}`,
           });
           tokenData = {
@@ -106,6 +106,9 @@ const agentExecutor: NodeExecutor = {
         }
       }
 
+      // NOTE: tokenData uses a nested { [nodeId]: {...} } shape instead of flat keys.
+      // The Phase 2 event-bridge must handle this specially rather than merging it
+      // directly into node.data. This allows the runner to accumulate per-node stats.
       const dataPatch: Record<string, unknown> = {};
       if (tokenData) {
         dataPatch.tokenData = { [nodeId]: tokenData };

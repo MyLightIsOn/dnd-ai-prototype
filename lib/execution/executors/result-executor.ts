@@ -4,8 +4,7 @@ import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from '../n
 const resultExecutor: NodeExecutor = {
   type: 'result',
   async execute(input: NodeExecutionInput): Promise<NodeExecutionResult> {
-    const { context, inputs, nodeData } = input;
-    const name = (nodeData as { name?: string }).name || 'Result';
+    const { context, inputs } = input;
 
     const finalOutput = inputs.length > 0
       ? inputs[inputs.length - 1]

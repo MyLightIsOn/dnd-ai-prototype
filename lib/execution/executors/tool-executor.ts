@@ -32,7 +32,7 @@ const toolExecutor: NodeExecutor = {
 
     context.emitter.emit({
       type: 'log:update',
-      index: -1,
+      index: 'last',
       message: `🔧 ${data.name || 'Tool'} [${kind}]\n${output.slice(0, 200)}${output.length > 200 ? '…' : ''}`,
     });
 
