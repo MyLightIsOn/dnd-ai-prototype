@@ -4,7 +4,7 @@ import type { RouterData } from '@/types/router';
 import { evaluateRoutes } from '../route-evaluator';
 import type { LLMJudgeResult } from '../route-evaluator';
 
-const routerExecutor: NodeExecutor = {
+export const routerExecutor: NodeExecutor = {
   type: 'router',
   async execute(input: NodeExecutionInput): Promise<NodeExecutionResult> {
     const data = input.nodeData as unknown as RouterData;

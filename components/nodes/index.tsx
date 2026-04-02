@@ -235,15 +235,7 @@ export const PromptNode: React.FC<NodeProps> = ({ data }) => {
   );
 };
 
-export const nodeTypes: NodeTypes = {
-  agent: AgentNode,
-  tool: ToolNode,
-  result: ResultNode,
-  prompt: PromptNode,
-  document: DocumentNode,
-  chunker: ChunkerNode,
-  router: RouterNode,
-  loop: LoopNode,
-  memory: MemoryNode,
-  'human-review': HumanReviewNode,
-};
+import '@/lib/node-types/built-in/index';
+import { getNodeTypesMap } from '@/lib/node-types/registry';
+
+export const nodeTypes: NodeTypes = getNodeTypesMap();

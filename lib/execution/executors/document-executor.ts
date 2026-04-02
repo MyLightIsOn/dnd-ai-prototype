@@ -2,7 +2,7 @@ import { registerNodeExecutor } from '../node-executor';
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from '../node-executor';
 import type { DocumentData } from '@/types/document';
 
-const documentExecutor: NodeExecutor = {
+export const documentExecutor: NodeExecutor = {
   type: 'document',
   async execute(input: NodeExecutionInput): Promise<NodeExecutionResult> {
     const data = input.nodeData as DocumentData;

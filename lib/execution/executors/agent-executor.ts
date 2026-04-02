@@ -19,7 +19,7 @@ function buildMessages(agentData: AgentData, inputs: string[]): Message[] {
   return messages;
 }
 
-const agentExecutor: NodeExecutor = {
+export const agentExecutor: NodeExecutor = {
   type: 'agent',
   async execute(input: NodeExecutionInput): Promise<NodeExecutionResult> {
     const data = input.nodeData as AgentData;

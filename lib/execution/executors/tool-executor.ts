@@ -4,7 +4,7 @@ import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from '../n
 import type { ToolData } from '@/types/tool';
 import { getTool } from '@/lib/tools/registry';
 
-const toolExecutor: NodeExecutor = {
+export const toolExecutor: NodeExecutor = {
   type: 'tool',
   async execute(input: NodeExecutionInput): Promise<NodeExecutionResult> {
     const data = input.nodeData as ToolData;

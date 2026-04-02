@@ -2,7 +2,7 @@ import { registerNodeExecutor } from '../node-executor';
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from '../node-executor';
 import type { PromptData } from '@/types/prompt';
 
-const promptExecutor: NodeExecutor = {
+export const promptExecutor: NodeExecutor = {
   type: 'prompt',
   async execute(input: NodeExecutionInput): Promise<NodeExecutionResult> {
     const data = input.nodeData as PromptData;

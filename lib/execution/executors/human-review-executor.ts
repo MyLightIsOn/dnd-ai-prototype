@@ -3,7 +3,7 @@ import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from '../n
 import type { HumanReviewData, ReviewDecision } from '@/types/human-review';
 import { evaluateApprovalRule, canDecideEarly } from '../approval-evaluator';
 
-const humanReviewExecutor: NodeExecutor = {
+export const humanReviewExecutor: NodeExecutor = {
   type: 'human-review',
   async execute(input: NodeExecutionInput): Promise<NodeExecutionResult> {
     const data = input.nodeData as unknown as HumanReviewData;

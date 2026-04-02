@@ -3,7 +3,7 @@ import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from '../n
 import type { LoopData } from '@/types/loop';
 import { shouldBreakLoop } from '../loop-evaluator';
 
-const loopExecutor: NodeExecutor = {
+export const loopExecutor: NodeExecutor = {
   type: 'loop',
   async execute(input: NodeExecutionInput): Promise<NodeExecutionResult> {
     const data = input.nodeData as unknown as LoopData;

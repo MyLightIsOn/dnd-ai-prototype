@@ -3,7 +3,7 @@ import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from '../n
 import type { ChunkerData } from '@/types/chunker';
 import { chunkDocument } from '@/lib/document/chunker';
 
-const chunkerExecutor: NodeExecutor = {
+export const chunkerExecutor: NodeExecutor = {
   type: 'chunker',
   async execute(input: NodeExecutionInput): Promise<NodeExecutionResult> {
     const data = input.nodeData as unknown as ChunkerData;

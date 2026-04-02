@@ -3,7 +3,7 @@ import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from '../n
 import type { MemoryData } from '@/types/memory';
 import { globalMemoryInstance } from '../memory-manager';
 
-const memoryExecutor: NodeExecutor = {
+export const memoryExecutor: NodeExecutor = {
   type: 'memory',
   async execute(input: NodeExecutionInput): Promise<NodeExecutionResult> {
     const data = input.nodeData as unknown as MemoryData;
