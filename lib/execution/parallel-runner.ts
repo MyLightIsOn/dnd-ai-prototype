@@ -1,23 +1,13 @@
-import React from "react";
 import { topoSort } from "@/lib/topoSort";
 import type { Edge } from "@xyflow/react";
-import type { AgentData, ToolData, TypedNode, Id, ChunkerData, RouterData, LoopData, PromptData } from "@/types";
+import type { TypedNode, Id, RouterData, LoopData } from "@/types";
 import type { NodeStats, RunStats } from '@/types'
-import type { DocumentData } from "@/types/document";
-import type { MemoryData } from "@/types/memory";
-import type { HumanReviewData, ReviewDecision } from "@/types/human-review";
-import { getProvider } from "@/lib/providers";
-import { getApiKey } from "@/lib/storage/api-keys";
-import type { Message } from "@/lib/providers/base";
-import { chunkDocument } from "@/lib/document/chunker";
 import { groupNodesByLevel } from "./levels";
-import { evaluateRoutes } from "./route-evaluator";
-import { shouldBreakLoop } from "./loop-evaluator";
-import { MemoryManager, globalMemoryInstance } from "./memory-manager";
-import { evaluateApprovalRule, canDecideEarly } from "./approval-evaluator";
+import { MemoryManager } from "./memory-manager";
 import { AuditLog } from "./audit-log";
-import "@/lib/tools/index"; // register all tools (side-effect import)
-import { getTool } from "@/lib/tools/registry";
+import '@/lib/execution/executors/index'; // register all executors
+import { getNodeExecutor } from './node-executor';
+import { ExecutionEventEmitter } from './events';
 
 /**
  * Filters edges based on router and loop execution decisions.
@@ -93,38 +83,7 @@ function getActiveEdges(
   });
 }
 
-/**
- * Build the message array for an LLM completion request.
- */
-function buildMessages(agentData: AgentData, inputs: string[]): Message[] {
-  const messages: Message[] = [];
-
-  if (inputs.length > 0) {
-    messages.push({
-      role: 'user',
-      content: `Context:\n\n${inputs.join('\n\n---\n\n')}`
-    });
-  }
-
-  if (agentData.prompt) {
-    messages.push({
-      role: 'user',
-      content: agentData.prompt
-    });
-  }
-
-  return messages;
-}
-
 export type ExecutionStatus = 'idle' | 'running' | 'paused' | 'cancelled';
-
-type ReviewRequest = {
-  reviewerLabel: string;
-  nodeName: string;
-  instructions?: string;
-  content: string;
-  mode: 'approve-reject' | 'edit-and-approve';
-};
 
 type ReviewDecisionResult = {
   decision: 'approved' | 'rejected';
@@ -145,22 +104,31 @@ export interface RunOptions {
   providerOverride?: string
 }
 
+/**
+ * Execution engine: decoupled control objects and event emitter.
+ * Callers (UI, store, tests) provide this instead of 11 React setter parameters.
+ */
+export interface ExecutionEngine {
+  emitter: ExecutionEventEmitter;
+  control: { current: ExecutionStatus };
+  errorRecovery: { current: 'retry' | 'skip' | 'abort' | null };
+  reviewDecision: { current: ReviewDecisionResult | null };
+}
+
 interface NodeExecutionContext {
   nodesById: Record<Id, TypedNode>;
   incomingEdgesByNode: Record<Id, Id[]>;
   nodeOutputs: Record<Id, string>;
   loopIterations: Record<Id, number>;
   loopExited: Record<Id, boolean>;
-  setLogs: React.Dispatch<React.SetStateAction<string[]>>;
-  setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>;
-  executionControl?: React.MutableRefObject<ExecutionStatus>;
+  executionControl: { current: ExecutionStatus };
   workflowMemory: MemoryManager;
   auditLog: AuditLog;
-  setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>;
-  reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>;
+  reviewDecisionRef: { current: ReviewDecisionResult | null };
   options?: RunOptions;
   nodeStatsBuffer: NodeStats[];
   nodeTokenData: Record<string, { promptTokens: number; completionTokens: number; costUsd: number }>;
+  emitter: ExecutionEventEmitter;
 }
 
 /**
@@ -171,529 +139,60 @@ async function executeNode(
   nodeId: Id,
   context: NodeExecutionContext
 ): Promise<string> {
-  const { nodesById, incomingEdgesByNode, nodeOutputs, loopIterations, loopExited, setLogs, setNodes, executionControl, workflowMemory, auditLog, setReviewRequest, reviewDecisionRef } = context;
+  const { nodesById, incomingEdgesByNode, nodeOutputs, loopIterations, loopExited,
+          workflowMemory, auditLog, executionControl, options, emitter } = context;
   const node = nodesById[nodeId];
 
-  // Set node to executing state
-  setNodes(nodes => nodes.map(n =>
-    n.id === nodeId ? { ...n, data: { ...n.data, executionState: 'executing' as const } } : n
-  ));
-
-  let output = '';
+  // Emit start — bridge translates to setNodes executionState: 'executing'
+  emitter.emit({ type: 'node:start', nodeId });
 
   try {
-    if (node.type === "prompt") {
-      // Prompt node: pass text to downstream nodes
-      const promptData = node.data as PromptData;
-      output = promptData.text || '';
-      setLogs(logs => logs.concat(`💬 ${promptData.name || 'Prompt'}: ${output.slice(0, 80)}${output.length > 80 ? '…' : ''}`));
-    } else if (node.type === "document") {
-      // Document node: store content for downstream agents
-      const docData = node.data as DocumentData;
-      output = docData.content || '';
-      setLogs(logs => logs.concat(`📄 ${docData.name || 'Document'}: ${docData.fileName || 'No file'} (${docData.content?.length || 0} chars)`));
-    } else if (node.type === "agent") {
-      // Gather inputs from dependencies
-      const agentData = node.data as AgentData;
-      const dependencyOutputs = incomingEdgesByNode[node.id]
-        .map((depId) => nodeOutputs[depId])
-        .filter(Boolean);
-
-      const mode = agentData.mode || 'mock';
-      const agentName = agentData.name || "Agent";
-      const modelStr = context.options?.providerOverride ?? agentData.model ?? "model";
-
-      if (mode === 'mock') {
-        // Mock mode
-        output = `This is a mock response from ${agentName}. In live mode, this would be the actual LLM output based on the prompt: "${agentData.prompt || 'no prompt'}"`;
-        setLogs((logs) => logs.concat(`🤖 ${agentName} (${modelStr}) [MOCK]\n${output}`));
-      } else {
-        // Live mode: call real LLM provider
-        // resolvedModel intentionally has no sentinel fallback — live mode requires a valid "provider/model-id"
-        const resolvedModel = context.options?.providerOverride ?? agentData.model;
-        if (!resolvedModel || !resolvedModel.includes('/')) {
-          throw new Error(`Invalid model format. Expected "provider/model-id"`);
-        }
-
-        const [providerName, modelId] = resolvedModel.split('/', 2);
-        const provider = getProvider(providerName);
-
-        if (!provider) {
-          throw new Error(`Provider "${providerName}" not found`);
-        }
-
-        const apiKey = getApiKey(providerName);
-        if (!apiKey) {
-          throw new Error(`No API key found for provider "${providerName}"`);
-        }
-
-        const messages = buildMessages(agentData, dependencyOutputs);
-        const streaming = agentData.streaming || false;
-
-        if (streaming && provider.supportsStreaming) {
-          // Streaming mode
-          let accumulatedOutput = '';
-          let logIndex = -1;
-
-          // Add initial log entry
-          setLogs((logs) => {
-            logIndex = logs.length;
-            return logs.concat(`🤖 ${agentName} (${modelStr})\n⏳ Streaming...`);
-          });
-
-          const streamIterator = provider.stream({
-            model: modelId,
-            messages,
-            temperature: agentData.temperature,
-            maxTokens: agentData.maxTokens,
-            apiKey
-          });
-
-          const stream = {
-            [Symbol.asyncIterator]() {
-              return streamIterator;
-            }
-          };
-
-          for await (const chunk of stream) {
-            accumulatedOutput += chunk.delta;
-
-            setLogs((logs) => {
-              const updated = [...logs];
-              updated[logIndex] = `🤖 ${agentName} (${modelStr})\n${accumulatedOutput}${chunk.done ? '' : '▌'}`;
-              return updated;
-            });
-
-            if (chunk.done && chunk.usage) {
-              const cost = provider.calculateCost(modelId, chunk.usage);
-              setLogs((logs) => {
-                const updated = [...logs];
-                updated[logIndex] = `🤖 ${agentName} (${modelStr})\n${accumulatedOutput}\n💰 Cost: $${cost.toFixed(6)} | Tokens: ${chunk.usage!.totalTokens}`;
-                return updated;
-              });
-              context.nodeTokenData[nodeId] = {
-                promptTokens: chunk.usage.inputTokens ?? 0,
-                completionTokens: chunk.usage.outputTokens ?? 0,
-                costUsd: cost,
-              };
-            }
-          }
-
-          output = accumulatedOutput;
-        } else {
-          // Non-streaming mode
-          setLogs((logs) => logs.concat(`🤖 ${agentName} (${modelStr})\n⏳ Waiting for response...`));
-
-          const response = await provider.complete({
-            model: modelId,
-            messages,
-            temperature: agentData.temperature,
-            maxTokens: agentData.maxTokens,
-            apiKey
-          });
-
-          const cost = provider.calculateCost(modelId, response.usage);
-          const logText = `🤖 ${agentName} (${modelStr})\n${response.content}\n💰 Cost: $${cost.toFixed(6)} | Tokens: ${response.usage.totalTokens}`;
-
-          output = response.content;
-          context.nodeTokenData[nodeId] = {
-            promptTokens: response.usage.inputTokens ?? 0,
-            completionTokens: response.usage.outputTokens ?? 0,
-            costUsd: cost,
-          };
-          setLogs((logs) => {
-            const updated = [...logs];
-            updated[updated.length - 1] = logText;
-            return updated;
-          });
-        }
-      }
-    } else if (node.type === "tool") {
-      const toolData = node.data as ToolData;
-      const dependencyOutputs = incomingEdgesByNode[node.id]
-        .map((depId) => nodeOutputs[depId])
-        .filter(Boolean);
-      const input = dependencyOutputs.join("\n");
-      const kind = (toolData.kind ?? "web-search") as string;
-      const tool = getTool(kind);
-
-      setLogs((logs) =>
-        logs.concat(`🔧 ${toolData.name || "Tool"} [${kind}] — running…`)
-      );
-
-      if (!tool) {
-        throw new Error(`Unknown tool kind: ${kind}`);
-      }
-
-      const result = await tool.execute(input, toolData.config ?? {});
-
-      if (!result.success) {
-        throw new Error(result.error ?? "Tool execution failed");
-      }
-
-      output = result.output;
-
-      // Store result on node data for properties panel preview
-      setNodes((nodes) =>
-        nodes.map((n) =>
-          n.id === node.id
-            ? { ...n, data: { ...n.data, lastResult: result.output } }
-            : n
-        )
-      );
-
-      setLogs((logs) => {
-        const updated = [...logs];
-        updated[updated.length - 1] =
-          `🔧 ${toolData.name || "Tool"} [${kind}]\n${result.output.slice(0, 200)}${result.output.length > 200 ? "…" : ""}`;
-        return updated;
-      });
-    } else if (node.type === "chunker") {
-      // Chunker node
-      const chunkerData = node.data as ChunkerData;
-      const dependencyOutputs = incomingEdgesByNode[node.id]
-        .map((depId) => nodeOutputs[depId])
-        .filter((v) => v != null);
-
-      const parentContent = dependencyOutputs[0] ?? '';
-      const chunks = chunkDocument(
-        parentContent,
-        chunkerData.strategy || 'fixed',
-        chunkerData.chunkSize || 500,
-        chunkerData.overlap || 50
-      );
-
-      // Store chunks in node data
-      setNodes((currentNodes) =>
-        currentNodes.map((mapped) =>
-          mapped.id === node.id
-            ? { ...mapped, data: { ...mapped.data, chunks } }
-            : mapped,
-        ),
-      );
-
-      output = chunks.join('\n\n---CHUNK---\n\n');
-      setLogs(logs => logs.concat(`📑 ${chunkerData.name || 'Chunker'}: Created ${chunks.length} chunks`));
-    } else if (node.type === "router") {
-      // Router node - evaluate routes and select path
-      const routerData = node.data as RouterData;
-      const dependencyOutputs = incomingEdgesByNode[node.id]
-        .map((depId) => nodeOutputs[depId])
-        .filter(Boolean);
-
-      if (dependencyOutputs.length === 0) {
-        throw new Error('No input to router');
-      }
-
-      const input = dependencyOutputs.join('\n\n');
-
-      // Track LLM judge results for logging
-      let llmJudgeResult: { cost: number; tokens: number; decision: string } | undefined;
-
-      // Evaluate routes
-      const selectedRouteId = await evaluateRoutes(input, routerData, (result) => {
-        llmJudgeResult = result;
-      });
-
-      // Determine which route to use
-      let executedRoute: string;
-      if (selectedRouteId) {
-        // A route matched
-        executedRoute = selectedRouteId;
-        const selectedRoute = routerData.routes?.find(r => r.id === selectedRouteId);
-        let logMessage = `🔀 ${routerData.name || 'Router'}: Routed to "${selectedRoute?.label || 'Unknown'}"`;
-
-        // Add LLM judge cost info if available
-        if (llmJudgeResult) {
-          logMessage += `\n💰 LLM Judge Cost: $${llmJudgeResult.cost.toFixed(6)} | Tokens: ${llmJudgeResult.tokens} | Decision: "${llmJudgeResult.decision}"`;
-        }
-
-        setLogs(logs => logs.concat(logMessage));
-        output = input; // Pass through input to selected route
-      } else if (routerData.defaultRoute) {
-        // No route matched, but default route is configured
-        executedRoute = 'default';
-        let logMessage = `⚠️ ${routerData.name || 'Router'}: No routes matched, using default route`;
-
-        // Add LLM judge cost info if available
-        if (llmJudgeResult) {
-          logMessage += `\n💰 LLM Judge Cost: $${llmJudgeResult.cost.toFixed(6)} | Tokens: ${llmJudgeResult.tokens}`;
-        }
-
-        setLogs(logs => logs.concat(logMessage));
-        output = input;
-      } else {
-        // No route matched and no default route configured
-        throw new Error(
-          `Router "${routerData.name || 'Router'}": No routes matched and no default route configured. ` +
-          `Either add a default route or adjust route conditions to match the input.`
-        );
-      }
-
-      // Store selected route in node data
-      setNodes((currentNodes) =>
-        currentNodes.map((mapped) =>
-          mapped.id === node.id
-            ? { ...mapped, data: { ...mapped.data, executedRoute } }
-            : mapped,
-        ),
-      );
-    } else if (node.type === "loop") {
-      // Loop node - manage iteration counting and break conditions
-      const loopData = node.data as LoopData;
-      const dependencyOutputs = incomingEdgesByNode[node.id]
-        .map((depId) => nodeOutputs[depId])
-        .filter((v) => v != null);
-
-      const input = dependencyOutputs.join('\n\n');
-
-      // Use local iteration counter (nodesById is a snapshot and goes stale during execution)
-      const newIteration = (loopIterations[nodeId] || 0) + 1;
-      loopIterations[nodeId] = newIteration;
-
-      // Check if we've reached max iterations
-      const maxIterations = loopData.maxIterations || 10;
-      const reachedMaxIterations = newIteration >= maxIterations;
-
-      // Check break condition
-      const shouldBreak = reachedMaxIterations ||
-        await shouldBreakLoop(loopData.breakCondition, input, newIteration);
-
-      // Determine if loop should exit
-      const executedExit = shouldBreak;
-      // Record in local map so getActiveEdges can use fresh state (nodesById is stale)
-      loopExited[nodeId] = executedExit;
-
-      // Log iteration status
-      if (executedExit) {
-        const reason = reachedMaxIterations
-          ? `reached max iterations (${maxIterations})`
-          : 'break condition met';
-        setLogs(logs => logs.concat(
-          `🔁 ${loopData.name || 'Loop'}: Iteration ${newIteration} - Exiting (${reason})`
-        ));
-      } else {
-        setLogs(logs => logs.concat(
-          `🔁 ${loopData.name || 'Loop'}: Iteration ${newIteration} - Continuing`
-        ));
-      }
-
-      // Update loop node data with new iteration and exit status
-      setNodes((currentNodes) =>
-        currentNodes.map((mapped) =>
-          mapped.id === node.id
-            ? {
-                ...mapped,
-                data: {
-                  ...mapped.data,
-                  currentIteration: newIteration,
-                  executedExit
-                }
-              }
-            : mapped,
-        ),
-      );
-
-      // Pass through input to next node
-      output = input;
-    } else if (node.type === "memory") {
-      // Memory node - store inputs in MemoryManager
-      const memData = node.data as MemoryData;
-      const dependencyOutputs = incomingEdgesByNode[node.id]
-        .map((depId) => nodeOutputs[depId])
-        .filter(Boolean);
-
-      const input = dependencyOutputs.join('\n\n');
-
-      // Determine correct manager based on scope
-      const manager = memData.scope === 'global' ? globalMemoryInstance : workflowMemory;
-
-      // Try to parse input as JSON; store each key-value pair, otherwise store under node name
-      let storedCount = 0;
-      try {
-        const parsed = JSON.parse(input);
-        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          for (const [k, v] of Object.entries(parsed)) {
-            manager.set(k, v);
-            storedCount++;
-          }
-        } else {
-          manager.set(memData.name, input);
-          storedCount = 1;
-        }
-      } catch {
-        manager.set(memData.name, input);
-        storedCount = 1;
-      }
-
-      setLogs(logs => logs.concat(`🧠 Memory [${memData.name || 'Memory'}]: stored ${storedCount} key(s)`));
-
-      // Update node's keys field to reflect what was actually stored
-      const storedKeys = Object.keys(manager.getAll());
-      setNodes((current) =>
-        current.map((n) =>
-          n.id === node.id
-            ? { ...n, data: { ...n.data, keys: storedKeys } }
-            : n,
-        ),
-      );
-
-      // Pass through input to downstream nodes
-      output = input;
-    } else if (node.type === "human-review") {
-      const reviewData = node.data as HumanReviewData;
-      const multi = reviewData.multiReview;
-      const dependencyOutputs = incomingEdgesByNode[node.id]
-        .map((depId) => nodeOutputs[depId])
-        .filter(Boolean);
-      const input = dependencyOutputs.join('\n\n');
-      let finalContent = input;
-      let finalDecision: 'approved' | 'rejected' = 'approved';
-
-      if (multi?.enabled) {
-        const decisions: ReviewDecision[] = [];
-
-        for (let i = 0; i < multi.reviewerCount; i++) {
-          if (reviewDecisionRef) reviewDecisionRef.current = null;
-          if (setReviewRequest) {
-            setReviewRequest({
-              reviewerLabel: `Reviewer ${i + 1}`,
-              nodeName: reviewData.name,
-              instructions: reviewData.instructions,
-              content: finalContent,
-              mode: reviewData.reviewMode,
-            });
-          }
-
-          // Poll for decision (same pattern as error recovery)
-          while (reviewDecisionRef && reviewDecisionRef.current === null) {
-            await new Promise((resolve) => setTimeout(resolve, 100));
-            // Check if execution was cancelled
-            if (executionControl?.current === 'cancelled') break;
-          }
-
-          if (executionControl?.current === 'cancelled') break;
-
-          const { decision, editedContent } = reviewDecisionRef!.current!;
-          decisions.push({ reviewer: `Reviewer ${i + 1}`, decision, timestamp: Date.now() });
-          if (editedContent) finalContent = editedContent;
-
-          if (canDecideEarly(decisions, multi.approvalRule, multi.reviewerCount)) break;
-        }
-
-        if (executionControl?.current !== 'cancelled') {
-          finalDecision = evaluateApprovalRule(decisions, multi.approvalRule);
-        }
-
-        // Update node with decisions
-        setNodes((current) =>
-          current.map((n) =>
-            n.id === node.id
-              ? { ...n, data: { ...n.data, multiReview: { ...multi, decisions }, lastDecision: finalDecision } }
-              : n,
-          ),
-        );
-      } else {
-        // Single reviewer
-        if (reviewDecisionRef) reviewDecisionRef.current = null;
-        if (setReviewRequest) {
-          setReviewRequest({
-            reviewerLabel: 'Reviewer',
-            nodeName: reviewData.name,
-            instructions: reviewData.instructions,
-            content: input,
-            mode: reviewData.reviewMode,
-          });
-        }
-
-        while (reviewDecisionRef && reviewDecisionRef.current === null) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          if (executionControl?.current === 'cancelled') break;
-        }
-
-        if (executionControl?.current !== 'cancelled' && reviewDecisionRef?.current !== null) {
-          const { decision, editedContent } = reviewDecisionRef!.current!;
-          if (editedContent) finalContent = editedContent;
-          finalDecision = decision;
-
-          setNodes((current) =>
-            current.map((n) =>
-              n.id === node.id ? { ...n, data: { ...n.data, lastDecision: finalDecision } } : n,
-            ),
-          );
-        }
-      }
-
-      // Log the human review decision to the audit trail (only if not cancelled)
-      if (executionControl?.current !== 'cancelled') {
-        auditLog.log({
-          nodeId: node.id,
-          nodeName: reviewData.name,
-          type: 'human-review',
-          decision: finalDecision,
-          beforeContent: input.slice(0, 2000),
-          afterContent: finalContent !== input ? finalContent.slice(0, 2000) : undefined,
-          reviewer: multi?.enabled
-            ? `Multiple (${multi.reviewerCount ?? 1} reviewer(s))`
-            : 'Reviewer',
-          metadata: {
-            reviewMode: reviewData.reviewMode,
-            multiReview: multi?.enabled ?? false,
-          },
-        });
-      }
-
-      if (finalDecision === 'rejected') {
-        throw new Error(`Content rejected by reviewer`);
-      }
-
-      output = finalContent;
-      setLogs((logs) => logs.concat(`👤 ${reviewData.name || 'Human Review'}: ${finalDecision}`));
-    } else if (node.type === "result") {
-      // Result node
-      const incomingNodes = incomingEdgesByNode[node.id] || [];
-      const dependencyOutputs = incomingNodes
-        .map((depId) => nodeOutputs[depId])
-        .filter(Boolean);
-
-      const finalOutput = dependencyOutputs.length > 0
-        ? dependencyOutputs[dependencyOutputs.length - 1]
-        : "<empty>";
-
-      const finalText = `📦 Final: ${finalOutput}`;
-      output = finalText;
-      setLogs((logs) => logs.concat(finalText));
-
-      // Update preview with full output (no truncation)
-      setNodes((currentNodes) =>
-        currentNodes.map((mapped) =>
-          mapped.id === node.id
-            ? { ...mapped, data: { ...mapped.data, preview: finalOutput } }
-            : mapped,
-        ),
-      );
+    const executor = getNodeExecutor(node.type!);
+    if (!executor) {
+      throw new Error(`No executor registered for node type: "${node.type}"`);
     }
 
-    // Mark node as completed
-    setNodes(nodes => nodes.map(n =>
-      n.id === nodeId ? { ...n, data: { ...n.data, executionState: 'completed' as const } } : n
-    ));
+    const inputs = (incomingEdgesByNode[nodeId] || [])
+      .map(depId => nodeOutputs[depId])
+      .filter((v): v is string => v != null && v !== undefined);
 
-    return output;
+    const result = await executor.execute({
+      nodeId,
+      nodeType: node.type!,
+      nodeData: node.data as Record<string, unknown>,
+      inputs,
+      context: {
+        workflowMemory,
+        auditLog,
+        emitter,
+        executionControl,
+        loopIterations,
+        loopExited,
+        reviewDecision: context.reviewDecisionRef,
+        options,
+      },
+    });
+
+    // Apply dataPatch (emits node:data event for bridge to handle)
+    if (result.dataPatch) {
+      // Extract tokenData for stats tracking before emitting
+      const { tokenData, ...nodePatch } = result.dataPatch as { tokenData?: Record<string, { promptTokens: number; completionTokens: number; costUsd: number }>; [key: string]: unknown };
+
+      if (tokenData) {
+        // Store token data in context for RunStats calculation
+        Object.assign(context.nodeTokenData, tokenData);
+      }
+
+      if (Object.keys(nodePatch).length > 0) {
+        emitter.emit({ type: 'node:data', nodeId, patch: nodePatch });
+      }
+    }
+
+    emitter.emit({ type: 'node:complete', nodeId, output: result.output });
+    return result.output;
   } catch (error) {
-    // Mark node as error
     const errorMessage = error instanceof Error ? error.message : String(error);
-    setNodes(nodes => nodes.map(n =>
-      n.id === nodeId ? {
-        ...n,
-        data: {
-          ...n.data,
-          executionState: 'error' as const,
-          executionError: errorMessage
-        }
-      } : n
-    ));
-
+    emitter.emit({ type: 'node:error', nodeId, error: errorMessage });
     throw error;
   }
 }
@@ -721,53 +220,23 @@ function buildRunStats(buffer: NodeStats[], provider?: string): RunStats {
  * Executes the graph using level-based parallel execution.
  * Nodes within the same level (no dependencies on each other) run in parallel.
  * Levels execute sequentially.
+ *
+ * All React state interaction is removed — callers pass an ExecutionEngine
+ * (emitter + control refs) and subscribe to events via the emitter.
  */
 export async function runParallel(
   nodes: TypedNode[],
   edges: Edge[],
-  setLogs: React.Dispatch<React.SetStateAction<string[]>>,
-  setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>,
-  setEdges: React.Dispatch<React.SetStateAction<Edge[]>>,
-  executionControl?: React.MutableRefObject<ExecutionStatus>,
-  errorRecoveryAction?: React.MutableRefObject<'retry' | 'skip' | 'abort' | null>,
-  setCurrentError?: React.Dispatch<React.SetStateAction<{ nodeId: string; nodeName: string; message: string } | null>>,
-  setReviewRequest?: React.Dispatch<React.SetStateAction<ReviewRequest | null>>,
-  reviewDecisionRef?: React.MutableRefObject<ReviewDecisionResult | null>,
+  engine: ExecutionEngine,
   options?: RunOptions,
 ): Promise<{ memory: MemoryManager; auditLog: AuditLog; stats: RunStats }> {
+  const { emitter, control: executionControl, errorRecovery: errorRecoveryAction, reviewDecision: reviewDecisionRef } = engine;
+
   // Create a workflow-scoped MemoryManager for this execution run
   const workflowMemory = new MemoryManager('workflow');
 
   // Create a fresh AuditLog for this execution run
   const auditLog = new AuditLog();
-
-  // Clear previous logs
-  setLogs([]);
-
-  // Reset all nodes to idle state and clear loop counters
-  setNodes(nodes => nodes.map(node => {
-    if (node.type === 'loop') {
-      const loopData = node.data as LoopData;
-      return {
-        ...node,
-        data: {
-          ...loopData,
-          currentIteration: 0,
-          executedExit: false,
-          executionState: 'idle' as const,
-          executionError: undefined
-        }
-      };
-    }
-    return node;
-  }));
-
-  // Reset all edges to default style at start of run
-  setEdges(edges => edges.map(edge => ({
-    ...edge,
-    style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 1 },
-    animated: false
-  })));
 
   // Strip loop back-edges before topo-sort. Loop nodes intentionally create cycles
   // (body → loop) for iteration; the runner handles this itself. We find all nodes
@@ -818,10 +287,10 @@ export async function runParallel(
       })
       .join(', ');
 
-    setLogs((logs) => logs.concat(
+    emitter.emit({ type: 'log:append', message:
       `⚠️ Cycles detected in graph (nodes: ${cycleNames}). ` +
       `Execution will proceed with acyclic nodes.`
-    ));
+    });
   }
 
   // Build lookup maps
@@ -848,7 +317,7 @@ export async function runParallel(
   // Group nodes by dependency level
   let levels = groupNodesByLevel(topologicalOrder, edgesForSort);
 
-  setLogs((logs) => logs.concat(`🚀 Executing ${levels.length} level(s) with parallel nodes...`));
+  emitter.emit({ type: 'log:append', message: `🚀 Executing ${levels.length} level(s) with parallel nodes...` });
 
   const STEP_DELAY_MS = 200;
   const GLOBAL_ITERATION_LIMIT = 1000;
@@ -878,14 +347,11 @@ export async function runParallel(
     // Check global iteration limit
     globalIterationCount++;
     if (globalIterationCount > GLOBAL_ITERATION_LIMIT) {
-      setLogs((logs) => logs.concat(
+      emitter.emit({ type: 'log:append', message:
         `🚨 Global iteration limit exceeded (${GLOBAL_ITERATION_LIMIT}). ` +
         `This likely indicates an infinite loop. Aborting execution.`
-      ));
-      setNodes(nodes => nodes.map(n => ({
-        ...n,
-        data: { ...n.data, executionState: 'idle' as const }
-      })));
+      });
+      emitter.emit({ type: 'execution:error', message: 'Global iteration limit exceeded' });
       return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
     }
 
@@ -897,37 +363,31 @@ export async function runParallel(
     }
 
     // Check for cancellation
-    if (executionControl?.current === 'cancelled') {
-      setLogs((logs) => logs.concat("🛑 Execution cancelled."));
-      setNodes(nodes => nodes.map(n => ({
-        ...n,
-        data: { ...n.data, executionState: 'idle' as const }
-      })));
+    if (executionControl.current === 'cancelled') {
+      emitter.emit({ type: 'log:append', message: "🛑 Execution cancelled." });
+      emitter.emit({ type: 'execution:cancelled' });
       return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
     }
 
     // Check for pause
-    if (executionControl?.current === 'paused') {
-      setLogs((logs) => logs.concat("⏸️  Execution paused."));
+    if (executionControl.current === 'paused') {
+      emitter.emit({ type: 'log:append', message: "⏸️  Execution paused." });
 
-      while (executionControl?.current === 'paused') {
+      while (executionControl.current === 'paused') {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
-      if (executionControl?.current === 'cancelled') {
-        setLogs((logs) => logs.concat("🛑 Execution cancelled."));
-        setNodes(nodes => nodes.map(n => ({
-          ...n,
-          data: { ...n.data, executionState: 'idle' as const }
-        })));
+      if (executionControl.current === 'cancelled') {
+        emitter.emit({ type: 'log:append', message: "🛑 Execution cancelled." });
+        emitter.emit({ type: 'execution:cancelled' });
         return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
       }
 
-      setLogs((logs) => logs.concat("▶️  Execution resumed."));
+      emitter.emit({ type: 'log:append', message: "▶️  Execution resumed." });
     }
 
     if (nodesToExecute.length > 1) {
-      setLogs((logs) => logs.concat(`⚡ Level ${levelIndex + 1}: Executing ${nodesToExecute.length} nodes in parallel...`));
+      emitter.emit({ type: 'log:append', message: `⚡ Level ${levelIndex + 1}: Executing ${nodesToExecute.length} nodes in parallel...` });
     }
 
     const context: NodeExecutionContext = {
@@ -936,16 +396,14 @@ export async function runParallel(
       nodeOutputs,
       loopIterations,
       loopExited,
-      setLogs,
-      setNodes,
       executionControl,
       workflowMemory,
       auditLog,
-      setReviewRequest,
       reviewDecisionRef,
       options,
       nodeStatsBuffer,
       nodeTokenData,
+      emitter,
     };
 
     // Execute all nodes in this level in parallel
@@ -1005,15 +463,11 @@ export async function runParallel(
         const nodeName = nodeData.name || node.type || 'Unknown Node';
         const errorMessage = result.reason instanceof Error ? result.reason.message : String(result.reason);
 
-        setLogs((logs) => logs.concat(`❌ ${nodeName}: ${errorMessage}`));
+        emitter.emit({ type: 'log:append', message: `❌ ${nodeName}: ${errorMessage}` });
 
-        // If error recovery is enabled
-        if (setCurrentError && errorRecoveryAction) {
-          setCurrentError({
-            nodeId,
-            nodeName,
-            message: errorMessage
-          });
+        // If error recovery is available
+        if (errorRecoveryAction) {
+          emitter.emit({ type: 'error-recovery:request', nodeId, nodeName, message: errorMessage });
 
           // Wait for user decision
           while (errorRecoveryAction.current === null) {
@@ -1024,12 +478,13 @@ export async function runParallel(
           errorRecoveryAction.current = null;
 
           if (action === 'abort') {
-            setLogs((logs) => logs.concat("🛑 Execution cancelled."));
-            setNodes(nodes => nodes.map(n => ({
-              ...n,
-              data: { ...n.data, executionState: 'idle' as const }
-            })));
+            emitter.emit({ type: 'log:append', message: "🛑 Execution cancelled." });
+            emitter.emit({ type: 'execution:cancelled' });
             return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
+          }
+          if (action === 'retry') {
+            emitter.emit({ type: 'log:append', message: `⚠️ Retry is not yet supported in parallel mode. Skipping node.` });
+            // fall through to skip behavior
           }
           // For skip or retry, continue (retry logic would need level re-execution)
           // For now, we skip failed nodes and continue
@@ -1047,53 +502,35 @@ export async function runParallel(
       // Build set of active edge IDs for quick lookup
       const activeEdgeIds = new Set(activeEdges.map(e => e.id));
 
-      // Update edge styles: green/bold/animated for selected paths, gray/thin for non-selected
-      setEdges(currentEdges => currentEdges.map(edge => {
+      // Emit edge style updates
+      type EdgeStyleUpdate = { edgeId: string; style: object; animated: boolean };
+      const edgeStyleUpdates: EdgeStyleUpdate[] = [];
+      for (const edge of edges) {
         if (activeEdgeIds.has(edge.id)) {
-          // Selected path: green, bold, animated, full opacity
-          return {
-            ...edge,
-            style: { stroke: '#22c55e', strokeWidth: 2, opacity: 1 },
-            animated: true
-          };
+          edgeStyleUpdates.push({ edgeId: edge.id, style: { stroke: '#22c55e', strokeWidth: 2, opacity: 1 }, animated: true });
         } else {
-          // Check if this edge comes from a router or loop that has executed
           const sourceNode = nodesById[edge.source as Id];
           if (sourceNode) {
             if (sourceNode.type === 'router') {
               const routerData = sourceNode.data as RouterData;
               if (routerData.executedRoute) {
-                // Non-selected path from executed router: gray, thin, dimmed, not animated
-                return {
-                  ...edge,
-                  style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
-                  animated: false
-                };
+                edgeStyleUpdates.push({ edgeId: edge.id, style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 }, animated: false });
               }
             } else if (sourceNode.type === 'loop') {
-              const loopData = sourceNode.data as LoopData;
-              // Dim the non-selected loop edge
-              if (edge.sourceHandle === 'continue' && loopData.executedExit) {
-                // Continue edge when loop exited: dimmed
-                return {
-                  ...edge,
-                  style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
-                  animated: false
-                };
-              } else if (edge.sourceHandle === 'exit' && !loopData.executedExit) {
-                // Exit edge when loop continuing: dimmed
-                return {
-                  ...edge,
-                  style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 },
-                  animated: false
-                };
+              const hasExited = !!loopExited[edge.source as Id];
+              if (edge.sourceHandle === 'continue' && hasExited) {
+                edgeStyleUpdates.push({ edgeId: edge.id, style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 }, animated: false });
+              } else if (edge.sourceHandle === 'exit' && !hasExited) {
+                edgeStyleUpdates.push({ edgeId: edge.id, style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 }, animated: false });
               }
             }
           }
-          // Edge not from an executed router/loop: keep current style
-          return edge;
         }
-      }));
+      }
+
+      if (edgeStyleUpdates.length > 0) {
+        emitter.emit({ type: 'edge:style', updates: edgeStyleUpdates });
+      }
 
       // Update incoming edges map with filtered edges
       // Reset for all nodes first
@@ -1178,17 +615,17 @@ export async function runParallel(
         ];
 
         if (hasRouterInLevel && hasLoopInLevel) {
-          setLogs((logs) => logs.concat(`🔀 Recalculated execution path based on router and loop decisions`));
+          emitter.emit({ type: 'log:append', message: `🔀 Recalculated execution path based on router and loop decisions` });
         } else if (hasRouterInLevel) {
-          setLogs((logs) => logs.concat(`🔀 Recalculated execution path based on router decisions`));
+          emitter.emit({ type: 'log:append', message: `🔀 Recalculated execution path based on router decisions` });
         } else {
-          setLogs((logs) => logs.concat(`🔁 Recalculated execution path based on loop decisions`));
+          emitter.emit({ type: 'log:append', message: `🔁 Recalculated execution path based on loop decisions` });
         }
       }
     }
   }
 
-  setLogs((logs) => logs.concat("✅ Done."));
+  emitter.emit({ type: 'log:append', message: "✅ Done." });
 
   return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
 }

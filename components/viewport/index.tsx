@@ -1,3 +1,4 @@
+'use client';
 import { useCallback, useState } from "react";
 import {
   Background,
@@ -13,33 +14,31 @@ import {
 } from "@xyflow/react";
 import type {
   Node,
-  Edge,
   NodeChange,
   EdgeChange,
   Connection,
-  OnSelectionChangeParams,
   NodeTypes,
 } from "@xyflow/react";
 
 import React from "react";
-import { nodeTypes } from "@/components/nodes";
+// Register all built-in node types before calling getNodeTypesMap()
+import '@/lib/node-types/built-in/index';
+import { getNodeTypesMap } from '@/lib/node-types/registry';
 import type { TypedNode } from "@/types";
 import { detectMemoryConnections } from "@/lib/execution/memory-connections";
 import { MemoryOverlay } from "./memory-overlay";
+import { useWorkflowStore } from "@/lib/store/workflow-store";
 
-function ViewPort({
-  nodes,
-  setNodes,
-  edges,
-  setEdges,
-  onSelectionChange,
-}: {
-  nodes: TypedNode[];
-  setNodes: React.Dispatch<React.SetStateAction<TypedNode[]>>;
-  edges: Edge[];
-  setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
-  onSelectionChange?: (params: OnSelectionChangeParams) => void;
-}) {
+// Get the node types map from the registry (populated by built-in side-effect imports)
+const nodeTypes = getNodeTypesMap();
+
+function ViewPort() {
+  const nodes = useWorkflowStore(s => s.nodes);
+  const setNodes = useWorkflowStore(s => s.setNodes);
+  const edges = useWorkflowStore(s => s.edges);
+  const setEdges = useWorkflowStore(s => s.setEdges);
+  const setSelectedId = useWorkflowStore(s => s.setSelectedId);
+
   const rf = useReactFlow();
   const [showMemoryConnections, setShowMemoryConnections] = useState(false);
 
@@ -66,6 +65,13 @@ function ViewPort({
         ),
       ),
     [setEdges],
+  );
+
+  const onSelectionChange = useCallback(
+    ({ nodes: selectedNodes }: { nodes: TypedNode[] }) => {
+      setSelectedId(selectedNodes?.[0]?.id || null);
+    },
+    [setSelectedId],
   );
 
   const onDrop = useCallback(

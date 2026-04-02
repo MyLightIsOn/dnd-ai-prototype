@@ -1,87 +1,23 @@
 import React from "react";
 import PaletteItem from "../palette-item";
+import '@/lib/node-types/built-in/index';
+import { getPaletteItems } from "@/lib/node-types/registry";
 
 function Pallette() {
+  const paletteItems = getPaletteItems();
   return (
     <div className="row-span-2 bg-white border rounded-2xl p-3 space-y-3">
       <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">
         Palette
       </div>
-      <PaletteItem
-        type={"prompt"}
-        label={"Prompt"}
-        meta={{ name: "Prompt", text: "Your prompt here" }}
-      />
-      <PaletteItem
-        type="agent"
-        label="Agent"
-        meta={{
-          name: "Agent",
-          model: "gpt-4o-mini",
-        }}
-      />
-      <PaletteItem
-        type="tool"
-        label="Tool"
-        meta={{
-          name: "Tool",
-          kind: "web-search",
-          config: { maxResults: 5 },
-        }}
-      />
-      <PaletteItem
-        type="document"
-        label="Document"
-        meta={{ name: "Document" }}
-      />
-      <PaletteItem
-        type="chunker"
-        label="Chunker"
-        meta={{ name: "Chunker", strategy: "fixed", chunkSize: 500, overlap: 50 }}
-      />
-      <PaletteItem
-        type="router"
-        label="Router"
-        meta={{
-          name: "Router",
-          strategy: "keyword",
-          routes: [
-            {
-              id: crypto.randomUUID(),
-              label: "Route A",
-              condition: { type: "keyword", keywords: ["example"], matchMode: "any", caseSensitive: false }
-            }
-          ]
-        }}
-      />
-      <PaletteItem
-        type="loop"
-        label="Loop"
-        meta={{
-          name: "Loop",
-          maxIterations: 10,
-          currentIteration: 0
-        }}
-      />
-      <PaletteItem
-        type="memory"
-        label="Memory"
-        meta={{
-          name: "Memory",
-          scope: "workflow",
-          keys: [],
-        }}
-      />
-      <PaletteItem
-        type="human-review"
-        label="Human Review"
-        meta={{
-          name: "Human Review",
-          reviewMode: "approve-reject",
-          instructions: "",
-        }}
-      />
-      <PaletteItem type="result" label="Result" meta={{ name: "Result" }} />
+      {paletteItems.map((item) => (
+        <PaletteItem
+          key={item.type}
+          type={item.type}
+          label={item.label}
+          meta={item.defaultData}
+        />
+      ))}
 
       <div className="pt-2 text-[11px] text-gray-500">
         Drag items onto the canvas. Connect nodes by dragging from a handle edge
