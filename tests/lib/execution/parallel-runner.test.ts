@@ -72,8 +72,8 @@ test('cancellation stops execution mid-run', async () => {
 
   await runParallel(nodes, edges, engine);
 
-  // Should have been cancelled before any nodes run (or at most 0 completions)
-  expect(completed.length).toBeLessThan(2);
+  // Should have been cancelled before any nodes run
+  expect(completed.length).toBe(0);
 });
 
 test('execution:cancelled event is emitted on cancellation', async () => {

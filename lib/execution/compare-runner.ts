@@ -1,4 +1,4 @@
-import type React from 'react'
+import type { Dispatch, SetStateAction } from 'react'
 import type { Edge } from '@xyflow/react'
 import type { TypedNode } from '@/types'
 import type { RunStats } from '@/types'
@@ -16,33 +16,12 @@ export interface CompareProvider {
 }
 
 /**
- * Creates a React state-compatible setter for a specific provider slot.
- * Mutates the logs array in place and calls setCompareLogs to trigger
- * a React re-render.
- *
- * Exported for unit testing.
- */
-export function buildCompareSetLogs(
-  index: number,
-  logs: string[][],
-  setCompareLogs: React.Dispatch<React.SetStateAction<string[][]>>,
-): React.Dispatch<React.SetStateAction<string[]>> {
-  return (action: React.SetStateAction<string[]>) => {
-    const prev = logs[index]
-    const next = typeof action === 'function' ? action(prev) : action
-    logs[index] = next
-    // Trigger re-render with a new array reference
-    setCompareLogs([...logs])
-  }
-}
-
-/**
  * Build an ExecutionEngine for a single provider slot in compare mode.
  * Wires log:append / log:update events to the shared compareLogs state updater.
  */
 function buildCompareEngine(
   index: number,
-  setCompareLogs: React.Dispatch<React.SetStateAction<string[][]>>,
+  setCompareLogs: Dispatch<SetStateAction<string[][]>>,
   executionControl: { current: ExecutionStatus },
 ): ExecutionEngine {
   const emitter = new ExecutionEventEmitter();
@@ -89,7 +68,7 @@ export async function runCompare(
   providers: CompareProvider[],
   nodes: TypedNode[],
   edges: Edge[],
-  setCompareLogs: React.Dispatch<React.SetStateAction<string[][]>>,
+  setCompareLogs: Dispatch<SetStateAction<string[][]>>,
   executionControls: Array<{ current: ExecutionStatus }>,
 ): Promise<RunStats[]> {
   if (executionControls.length < providers.length) {

@@ -482,6 +482,10 @@ export async function runParallel(
             emitter.emit({ type: 'execution:cancelled' });
             return { memory: workflowMemory, auditLog, stats: buildRunStats(nodeStatsBuffer, options?.providerOverride) };
           }
+          if (action === 'retry') {
+            emitter.emit({ type: 'log:append', message: `⚠️ Retry is not yet supported in parallel mode. Skipping node.` });
+            // fall through to skip behavior
+          }
           // For skip or retry, continue (retry logic would need level re-execution)
           // For now, we skip failed nodes and continue
         }
@@ -513,10 +517,10 @@ export async function runParallel(
                 edgeStyleUpdates.push({ edgeId: edge.id, style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 }, animated: false });
               }
             } else if (sourceNode.type === 'loop') {
-              const loopData = sourceNode.data as LoopData;
-              if (edge.sourceHandle === 'continue' && loopData.executedExit) {
+              const hasExited = !!loopExited[edge.source as Id];
+              if (edge.sourceHandle === 'continue' && hasExited) {
                 edgeStyleUpdates.push({ edgeId: edge.id, style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 }, animated: false });
-              } else if (edge.sourceHandle === 'exit' && !loopData.executedExit) {
+              } else if (edge.sourceHandle === 'exit' && !hasExited) {
                 edgeStyleUpdates.push({ edgeId: edge.id, style: { stroke: '#e5e7eb', strokeWidth: 1, opacity: 0.3 }, animated: false });
               }
             }

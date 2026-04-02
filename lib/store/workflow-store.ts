@@ -18,6 +18,7 @@ interface WorkflowState {
   executionStatus: ExecutionStatus;
   logs: string[];
   currentError: { nodeId: string; nodeName: string; message: string } | null;
+  reviewRequest: import('@/lib/execution/events').ReviewRequest | null;
 
   // Compare mode
   compareMode: boolean;
@@ -32,6 +33,7 @@ interface WorkflowState {
   // Execution control (mutable ref-like objects — same shape as React.MutableRefObject)
   executionControl: { current: ExecutionStatus };
   errorRecoveryAction: { current: 'retry' | 'skip' | 'abort' | null };
+  reviewDecision: { current: import('@/lib/execution/node-executor').ReviewDecisionResult | null };
   compareControls: Array<{ current: ExecutionStatus }>;
 
   // Actions
@@ -54,6 +56,8 @@ interface WorkflowState {
   setStatsOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   setCompareControls: (controls: Array<{ current: ExecutionStatus }>) => void;
+  setReviewRequest: (req: import('@/lib/execution/events').ReviewRequest | null) => void;
+  setReviewDecision: (decision: import('@/lib/execution/node-executor').ReviewDecisionResult | null) => void;
   updateNodeData: (nodeId: string, patch: Partial<NodeData>) => void;
   run: (options?: RunOptions) => Promise<void>;
 }
@@ -76,7 +80,9 @@ export const initialWorkflowState = {
   settingsOpen: false,
   executionControl: { current: 'idle' as ExecutionStatus },
   errorRecoveryAction: { current: null as 'retry' | 'skip' | 'abort' | null },
+  reviewDecision: { current: null as import('@/lib/execution/node-executor').ReviewDecisionResult | null },
   compareControls: [{ current: 'idle' as ExecutionStatus }, { current: 'idle' as ExecutionStatus }],
+  reviewRequest: null as import('@/lib/execution/events').ReviewRequest | null,
 };
 
 /**
@@ -90,6 +96,7 @@ function createStoreBridge(
     setNodes: WorkflowState['setNodes'];
     setEdges: WorkflowState['setEdges'];
     setCurrentError: WorkflowState['setCurrentError'];
+    setReviewRequest: WorkflowState['setReviewRequest'];
   }
 ): () => void {
   const unsubs: Array<() => void> = [];
@@ -163,6 +170,12 @@ function createStoreBridge(
     }
   }));
 
+  unsubs.push(emitter.on('review:request', (e) => {
+    if (e.type === 'review:request') {
+      store.setReviewRequest(e.request);
+    }
+  }));
+
   return () => unsubs.forEach(fn => fn());
 }
 
@@ -192,6 +205,11 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   setStatsOpen: (open) => set({ statsOpen: open }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
   setCompareControls: (controls) => set({ compareControls: controls }),
+  setReviewRequest: (req) => set({ reviewRequest: req }),
+  setReviewDecision: (decision) => set(state => {
+    state.reviewDecision.current = decision;
+    return {};
+  }),
   updateNodeData: (nodeId, patch) => set(state => ({
     nodes: state.nodes.map(n =>
       n.id === nodeId ? { ...n, data: { ...n.data, ...patch } as NodeData } : n
@@ -199,7 +217,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   })),
 
   run: async (options?: RunOptions) => {
-    const { executionControl, errorRecoveryAction, setRunStats } = get();
+    const state = get();
+    const { executionControl, errorRecoveryAction, reviewDecision, setRunStats } = state;
+
+    // Prevent double-run
+    if (executionControl.current === 'running') return;
+
+    // Set status to running
+    set({ executionStatus: 'running' });
+    executionControl.current = 'running';
+    errorRecoveryAction.current = null;
 
     // Pre-execution: clear logs, reset node/edge states
     get().setLogs([]);
@@ -223,13 +250,14 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       setNodes: get().setNodes,
       setEdges: get().setEdges,
       setCurrentError: get().setCurrentError,
+      setReviewRequest: get().setReviewRequest,
     });
 
     const engine: ExecutionEngine = {
       emitter,
       control: executionControl,
       errorRecovery: errorRecoveryAction,
-      reviewDecision: { current: null },
+      reviewDecision,
     };
 
     try {
@@ -237,6 +265,12 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       setRunStats([stats]);
     } finally {
       cleanup();
+      // Reset to idle after completion (unless already cancelled)
+      const currentStatus = executionControl.current;
+      if (currentStatus === 'running' || currentStatus === 'paused') {
+        set({ executionStatus: 'idle' });
+        executionControl.current = 'idle';
+      }
     }
   },
 }));
