@@ -20,6 +20,8 @@ function ToolBar({
   onToggleCompare,
   compareProviders,
   onChangeCompareProviders,
+  statsAvailable,
+  onStatsToggle,
 }: {
   onRun: () => void | Promise<void>;
   onPause: () => void;
@@ -35,6 +37,8 @@ function ToolBar({
   onToggleCompare: () => void;
   compareProviders: CompareProvider[];
   onChangeCompareProviders: (providers: CompareProvider[]) => void;
+  statsAvailable: boolean;
+  onStatsToggle: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [showSampleMenu, setShowSampleMenu] = useState(false);
@@ -258,6 +262,17 @@ function ToolBar({
         className="text-xs"
       >
         Compare
+      </Button>
+
+      <Button
+        disabled={!statsAvailable}
+        onClick={onStatsToggle}
+        variant="outline"
+        size="sm"
+        className="text-xs"
+        title="Run stats"
+      >
+        Stats
       </Button>
     </div>
     {compareMode && (

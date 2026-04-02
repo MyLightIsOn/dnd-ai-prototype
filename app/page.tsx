@@ -18,8 +18,8 @@ import { runParallel as runLib, type ExecutionStatus } from "@/lib/execution/par
 import type { CompareProvider } from '@/lib/execution/compare-runner'
 import { runCompare } from '@/lib/execution/compare-runner'
 import { CompareConsole } from '@/components/compare-console'
-
-import type { TypedNode, NodeData } from "@/types";
+import { ObservabilityPanel } from '@/components/observability-panel'
+import type { TypedNode, NodeData, RunStats } from "@/types";
 
 export default function App() {
   const [nodes, setNodes] = useState<TypedNode[]>([]);
@@ -43,6 +43,8 @@ export default function App() {
     { model: 'anthropic/claude-3-5-sonnet-20241022', displayName: 'Claude 3.5 Sonnet', isLocked: false },
   ])
   const [compareLogs, setCompareLogs] = useState<string[][]>([[], []])
+  const [runStats, setRunStats] = useState<RunStats[] | null>(null)
+  const [statsOpen, setStatsOpen] = useState(false)
   const compareControlRefs = useRef<React.MutableRefObject<ExecutionStatus>[]>(
     [{ current: 'idle' as ExecutionStatus }, { current: 'idle' as ExecutionStatus }]
   )
@@ -124,7 +126,8 @@ export default function App() {
     executionControlRef.current = 'running';
     errorRecoveryActionRef.current = null;
 
-    const { memory: _memory, auditLog: _auditLog, stats: _stats } = await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControlRef, errorRecoveryActionRef, setCurrentError);
+    const { memory: _memory, auditLog: _auditLog, stats } = await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControlRef, errorRecoveryActionRef, setCurrentError);
+    setRunStats([stats]);
 
     // Reset to idle after completion (unless already cancelled)
     const currentStatus = executionControlRef.current;
@@ -146,13 +149,14 @@ export default function App() {
     setCompareLogs(compareProviders.map(() => []))
 
     try {
-      const _compareStats = await runCompare(
+      const compareStats = await runCompare(
         compareProviders,
         nodes,
         edges,
         setCompareLogs,
         compareControlRefs.current,
       )
+      setRunStats(compareStats)
     } finally {
       setExecutionStatus('idle')
       compareControlRefs.current.forEach(ref => { ref.current = 'idle' })
@@ -175,6 +179,8 @@ export default function App() {
     executionControlRef.current = 'cancelled';
     compareControlRefs.current.forEach(ref => { ref.current = 'cancelled' })
     setExecutionStatus('cancelled');
+    setRunStats(null);
+    setStatsOpen(false);
 
     // Reset to idle after a brief moment
     setTimeout(() => {
@@ -229,6 +235,8 @@ export default function App() {
               setCompareLogs(compareProviders.map(() => []))
             }}
             compareProviders={compareProviders}
+            statsAvailable={runStats !== null}
+            onStatsToggle={() => setStatsOpen(o => !o)}
             onChangeCompareProviders={(ps) => {
               setCompareProviders(ps)
               // Sync compareControlRefs to match new provider count
@@ -261,7 +269,12 @@ export default function App() {
             <PropertiesPanel selected={selected} onChange={updateSelected} />
           </div>
 
-          <div className="col-span-3">
+          <div className="col-span-3 flex flex-col">
+            <ObservabilityPanel
+              stats={runStats ?? []}
+              isOpen={statsOpen && runStats !== null}
+              onClose={() => setStatsOpen(false)}
+            />
             {compareMode ? (
               <CompareConsole
                 providers={compareProviders}

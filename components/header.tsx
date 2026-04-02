@@ -18,6 +18,8 @@ function Header({
   onToggleCompare,
   compareProviders,
   onChangeCompareProviders,
+  statsAvailable,
+  onStatsToggle,
 }: {
   onRun: () => void | Promise<void>;
   onPause: () => void;
@@ -33,6 +35,8 @@ function Header({
   onToggleCompare: () => void;
   compareProviders: CompareProvider[];
   onChangeCompareProviders: (providers: CompareProvider[]) => void;
+  statsAvailable: boolean;
+  onStatsToggle: () => void;
 }) {
   return (
     <div className="col-span-3 flex items-center justify-between">
@@ -52,6 +56,8 @@ function Header({
         onToggleCompare={onToggleCompare}
         compareProviders={compareProviders}
         onChangeCompareProviders={onChangeCompareProviders}
+        statsAvailable={statsAvailable}
+        onStatsToggle={onStatsToggle}
       />
     </div>
   );
