@@ -37,35 +37,46 @@ interface WorkflowState {
   setSelectedId: (id: string | null) => void;
   setLogs: (updater: string[] | ((prev: string[]) => string[])) => void;
   setExecutionStatus: (status: ExecutionStatus) => void;
-  setCurrentError: (error: { nodeId: string; nodeName: string; message: string } | null) => void;
+  setCurrentError: (
+    error:
+      | { nodeId: string; nodeName: string; message: string }
+      | null
+      | ((prev: { nodeId: string; nodeName: string; message: string } | null) =>
+          { nodeId: string; nodeName: string; message: string } | null)
+  ) => void;
   setCompareMode: (mode: boolean) => void;
   setCompareProviders: (providers: CompareProvider[]) => void;
   setCompareLogs: (updater: string[][] | ((prev: string[][]) => string[][])) => void;
   setRunStats: (stats: RunStats[] | null) => void;
   setStatsOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
+  setCompareControls: (controls: Array<{ current: ExecutionStatus }>) => void;
   updateNodeData: (nodeId: string, patch: Partial<NodeData>) => void;
 }
 
-export const useWorkflowStore = create<WorkflowState>((set, _get) => ({
-  nodes: [],
-  edges: [],
-  selectedId: null,
-  executionStatus: 'idle',
-  logs: [],
-  currentError: null,
+export const initialWorkflowState = {
+  nodes: [] as TypedNode[],
+  edges: [] as Edge[],
+  selectedId: null as string | null,
+  executionStatus: 'idle' as ExecutionStatus,
+  logs: [] as string[],
+  currentError: null as { nodeId: string; nodeName: string; message: string } | null,
   compareMode: false,
   compareProviders: [
     { model: 'openai/gpt-4o', displayName: 'GPT-4o', isLocked: false },
     { model: 'anthropic/claude-3-5-sonnet-20241022', displayName: 'Claude 3.5 Sonnet', isLocked: false },
-  ],
-  compareLogs: [[], []],
-  runStats: null,
+  ] as CompareProvider[],
+  compareLogs: [[], []] as string[][],
+  runStats: null as RunStats[] | null,
   statsOpen: false,
   settingsOpen: false,
-  executionControl: { current: 'idle' },
-  errorRecoveryAction: { current: null },
-  compareControls: [{ current: 'idle' }, { current: 'idle' }],
+  executionControl: { current: 'idle' as ExecutionStatus },
+  errorRecoveryAction: { current: null as 'retry' | 'skip' | 'abort' | null },
+  compareControls: [{ current: 'idle' as ExecutionStatus }, { current: 'idle' as ExecutionStatus }],
+};
+
+export const useWorkflowStore = create<WorkflowState>((set, _get) => ({
+  ...initialWorkflowState,
 
   setNodes: (updater) => set(state => ({
     nodes: typeof updater === 'function' ? updater(state.nodes) : updater,
@@ -78,7 +89,9 @@ export const useWorkflowStore = create<WorkflowState>((set, _get) => ({
     logs: typeof updater === 'function' ? updater(state.logs) : updater,
   })),
   setExecutionStatus: (status) => set({ executionStatus: status }),
-  setCurrentError: (error) => set({ currentError: error }),
+  setCurrentError: (error) => set(state => ({
+    currentError: typeof error === 'function' ? error(state.currentError) : error,
+  })),
   setCompareMode: (mode) => set({ compareMode: mode }),
   setCompareProviders: (providers) => set({ compareProviders: providers }),
   setCompareLogs: (updater) => set(state => ({
@@ -87,6 +100,7 @@ export const useWorkflowStore = create<WorkflowState>((set, _get) => ({
   setRunStats: (stats) => set({ runStats: stats }),
   setStatsOpen: (open) => set({ statsOpen: open }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
+  setCompareControls: (controls) => set({ compareControls: controls }),
   updateNodeData: (nodeId, patch) => set(state => ({
     nodes: state.nodes.map(n =>
       n.id === nodeId ? { ...n, data: { ...n.data, ...patch } as NodeData } : n

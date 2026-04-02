@@ -1,30 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useWorkflowStore } from '@/lib/store/workflow-store';
+import { useWorkflowStore, initialWorkflowState } from '@/lib/store/workflow-store';
 import type { TypedNode } from '@/types';
 import type { Edge } from '@xyflow/react';
 
 // Helper to get a fresh store state
 const getStore = () => useWorkflowStore.getState();
-const resetStore = () => useWorkflowStore.setState(useWorkflowStore.getInitialState?.() ?? {
-  nodes: [],
-  edges: [],
-  selectedId: null,
-  executionStatus: 'idle',
-  logs: [],
-  currentError: null,
-  compareMode: false,
-  compareProviders: [
-    { model: 'openai/gpt-4o', displayName: 'GPT-4o', isLocked: false },
-    { model: 'anthropic/claude-3-5-sonnet-20241022', displayName: 'Claude 3.5 Sonnet', isLocked: false },
-  ],
-  compareLogs: [[], []],
-  runStats: null,
-  statsOpen: false,
-  settingsOpen: false,
-  executionControl: { current: 'idle' },
-  errorRecoveryAction: { current: null },
-  compareControls: [{ current: 'idle' }, { current: 'idle' }],
-});
+const resetStore = () => useWorkflowStore.setState({ ...initialWorkflowState });
 
 beforeEach(() => {
   resetStore();

@@ -15,6 +15,7 @@ import { exportJSON } from "@/lib/exportJSON";
 import { importJSON } from "@/lib/importJSON";
 import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis, addKeywordRouter, addLLMJudgeRouter, addRefineLoop, addWebSearchSample, addCodeGenSample, addApiFetchSample, addDbReportSample, addResearchCodeSample } from "@/lib/addSample";
 import { runParallel as runLib } from "@/lib/execution/parallel-runner";
+import type { ExecutionStatus } from "@/lib/execution/parallel-runner";
 import { runCompare } from '@/lib/execution/compare-runner';
 import { CompareConsole } from '@/components/compare-console';
 import { ObservabilityPanel } from '@/components/observability-panel';
@@ -29,6 +30,7 @@ export default function App() {
     executionControl,
     errorRecoveryAction,
     compareControls,
+    setCompareControls,
     setExecutionStatus,
     setLogs,
     setCurrentError,
@@ -72,9 +74,7 @@ export default function App() {
     executionControl.current = 'running';
     errorRecoveryAction.current = null;
 
-    const { memory: _memory, auditLog: _auditLog, stats } = await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControl, errorRecoveryAction, (v) => {
-      setCurrentError(typeof v === 'function' ? v(useWorkflowStore.getState().currentError) : v);
-    });
+    const { memory: _memory, auditLog: _auditLog, stats } = await runLib(nodes, edges, setLogs, setNodes, setEdges, executionControl, errorRecoveryAction, setCurrentError);
     setRunStats([stats]);
 
     const currentStatus = executionControl.current;
@@ -85,11 +85,11 @@ export default function App() {
   };
 
   const runCompareFn = async () => {
-    // Ensure we have one control ref per provider
-    while (compareControls.length < compareProviders.length) {
-      compareControls.push({ current: 'idle' });
-    }
-    compareControls.splice(compareProviders.length);
+    // Ensure we have one control ref per provider (immutable update)
+    const newControls = compareProviders.map((_, i) =>
+      compareControls[i] ?? { current: 'idle' as ExecutionStatus }
+    );
+    setCompareControls(newControls);
 
     setExecutionStatus('running');
     compareControls.forEach(ref => { ref.current = 'running'; });
