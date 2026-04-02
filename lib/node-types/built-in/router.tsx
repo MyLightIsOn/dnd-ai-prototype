@@ -25,14 +25,8 @@ registerNodeType({
     label: 'Router',
     defaultData: {
       name: 'Router',
-      strategy: 'keyword',
-      routes: [
-        {
-          id: crypto.randomUUID(),
-          label: 'Route A',
-          condition: { type: 'keyword', keywords: ['example'], matchMode: 'any', caseSensitive: false },
-        },
-      ],
+      routes: [{ id: 'route-1', label: 'Route 1', condition: '' }],
+      defaultRoute: false,
     },
   },
   executor: routerExecutor,

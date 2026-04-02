@@ -2,7 +2,7 @@
 import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { ResultNode } from '@/components/nodes/index';
+import { ResultNode } from '@/components/nodes/result-node';
 import type { OutputData } from '@/types/output';
 import { resultExecutor } from '@/lib/execution/executors/result-executor';
 import { registerNodeType } from '../registry';

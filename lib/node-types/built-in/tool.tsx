@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { ToolNode } from '@/components/nodes/index';
+import { ToolNode } from '@/components/nodes/tool-node';
 import { ToolProperties } from '@/components/properties/tool-properties/index';
 import type { ToolData } from '@/types/tool';
 import { toolExecutor } from '@/lib/execution/executors/tool-executor';

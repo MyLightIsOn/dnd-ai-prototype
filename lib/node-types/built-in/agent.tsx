@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { AgentNode } from '@/components/nodes/index';
+import { AgentNode } from '@/components/nodes/agent-node';
 import type { AgentData } from '@/types/agent';
 import { getAllModels } from '@/lib/providers';
 import { agentExecutor } from '@/lib/execution/executors/agent-executor';
@@ -209,7 +209,7 @@ registerNodeType({
   type: 'agent',
   palette: {
     label: 'Agent',
-    defaultData: { name: 'Agent', model: 'gpt-4o-mini' },
+    defaultData: { name: 'Agent', model: 'openai/gpt-4o-mini' },
   },
   executor: agentExecutor,
   canvasComponent: AgentNode,
