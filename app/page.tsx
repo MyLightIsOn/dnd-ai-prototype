@@ -8,12 +8,12 @@ import Console from "@/components/console";
 import SettingsModal from "@/components/settings";
 import { ErrorDialog } from "@/components/error-dialog";
 import { WelcomeDialog } from "@/components/welcome-dialog";
+import { SaveTemplateModal } from "@/components/templates/save-template-modal";
 import { Settings } from "lucide-react";
-import React from "react";
+import React, { useState } from "react";
 
 import { exportJSON } from "@/lib/exportJSON";
 import { importJSON } from "@/lib/importJSON";
-import { addDocumentSummarizer, addRAGPipeline, addMultiAgentAnalysis, addKeywordRouter, addLLMJudgeRouter, addRefineLoop, addWebSearchSample, addCodeGenSample, addApiFetchSample, addDbReportSample, addResearchCodeSample } from "@/lib/addSample";
 import type { ExecutionStatus } from "@/lib/execution/parallel-runner";
 import { runCompare } from '@/lib/execution/compare-runner';
 import { CompareConsole } from '@/components/compare-console';
@@ -44,29 +44,16 @@ export default function App() {
     settingsOpen,
     setSettingsOpen,
     currentError,
+    workflowName,
     run: storeRun,
   } = useWorkflowStore();
+
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
 
   const clearAll = () => {
     setNodes([]);
     setEdges([]);
     setLogs([]);
-  };
-
-  const addSample = (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop' | 'web-search' | 'code-gen' | 'api-fetch' | 'db-report' | 'research-code') => {
-    switch (sampleType) {
-      case 'summarizer': addDocumentSummarizer(setNodes, setEdges); break;
-      case 'rag': addRAGPipeline(setNodes, setEdges); break;
-      case 'multi-agent': addMultiAgentAnalysis(setNodes, setEdges); break;
-      case 'keyword-router': addKeywordRouter(setNodes, setEdges); break;
-      case 'llm-judge-router': addLLMJudgeRouter(setNodes, setEdges); break;
-      case 'refine-loop': addRefineLoop(setNodes, setEdges); break;
-      case 'web-search': addWebSearchSample(setNodes, setEdges); break;
-      case 'code-gen': addCodeGenSample(setNodes, setEdges); break;
-      case 'api-fetch': addApiFetchSample(setNodes, setEdges); break;
-      case 'db-report': addDbReportSample(setNodes, setEdges); break;
-      case 'research-code': addResearchCodeSample(setNodes, setEdges); break;
-    }
   };
 
   const run = async () => {
@@ -84,24 +71,15 @@ export default function App() {
   };
 
   const runCompareFn = async () => {
-    // Ensure we have one control ref per provider (immutable update)
     const newControls = compareProviders.map((_, i) =>
       compareControls[i] ?? { current: 'idle' as ExecutionStatus }
     );
     setCompareControls(newControls);
-
     setExecutionStatus('running');
     compareControls.forEach(ref => { ref.current = 'running'; });
     setCompareLogs(compareProviders.map(() => []));
-
     try {
-      const compareStats = await runCompare(
-        compareProviders,
-        nodes,
-        edges,
-        setCompareLogs,
-        compareControls,
-      );
+      const compareStats = await runCompare(compareProviders, nodes, edges, setCompareLogs, compareControls);
       setRunStats(compareStats);
     } finally {
       setExecutionStatus('idle');
@@ -127,27 +105,42 @@ export default function App() {
     setExecutionStatus('cancelled');
     setRunStats(null);
     setStatsOpen(false);
-
     setTimeout(() => {
       setExecutionStatus('idle');
       executionControl.current = 'idle';
     }, 100);
   };
 
+  const handleSaveTemplate = async (name: string, description: string) => {
+    const body = {
+      name,
+      description: description || null,
+      node_count: nodes.length,
+      node_types: nodes.map((n) => n.type as string),
+      workflow: { nodes, edges },
+    };
+    const res = await fetch('/api/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error((data as { error?: string }).error ?? 'Save failed');
+    }
+  };
+
   const handleErrorRetry = () => {
-    console.log('Error recovery: Retry selected');
     errorRecoveryAction.current = 'retry';
     setCurrentError(null);
   };
 
   const handleErrorSkip = () => {
-    console.log('Error recovery: Skip selected');
     errorRecoveryAction.current = 'skip';
     setCurrentError(null);
   };
 
   const handleErrorAbort = () => {
-    console.log('Error recovery: Abort selected');
     errorRecoveryAction.current = 'abort';
     setCurrentError(null);
     cancel();
@@ -165,24 +158,19 @@ export default function App() {
             onClear={clearAll}
             onExport={() => exportJSON({ nodes, edges })}
             onImport={(e) => importJSON({ e, setNodes, setEdges }).then((r) => console.log(r))}
-            onAddSample={addSample}
+            onSaveAsTemplate={() => setSaveTemplateOpen(true)}
           />
           <Palette />
-
           <div className="row-span-2 bg-white border rounded-2xl overflow-hidden">
             <ViewPort />
           </div>
-
           <div className="row-span-2 bg-white border rounded-2xl p-3 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="text-xs uppercase tracking-wide text-gray-500">
-                Properties
-              </div>
+              <div className="text-xs uppercase tracking-wide text-gray-500">Properties</div>
               <Settings size={16} />
             </div>
             <PropertiesPanel />
           </div>
-
           <div className="col-span-3 flex flex-col">
             <ObservabilityPanel
               stats={runStats ?? []}
@@ -201,13 +189,8 @@ export default function App() {
           </div>
         </div>
 
-        <SettingsModal
-          open={settingsOpen}
-          onOpenChange={setSettingsOpen}
-        />
-
+        <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
         <WelcomeDialog />
-
         <ErrorDialog
           open={currentError !== null}
           onOpenChange={(open) => !open && setCurrentError(null)}
@@ -216,6 +199,12 @@ export default function App() {
           onRetry={handleErrorRetry}
           onSkip={handleErrorSkip}
           onAbort={handleErrorAbort}
+        />
+        <SaveTemplateModal
+          open={saveTemplateOpen}
+          defaultName={workflowName || 'My Workflow'}
+          onSave={handleSaveTemplate}
+          onClose={() => setSaveTemplateOpen(false)}
         />
       </ReactFlowProvider>
     </div>

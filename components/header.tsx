@@ -11,7 +11,7 @@ function Header({
   onClear,
   onExport,
   onImport,
-  onAddSample,
+  onSaveAsTemplate,
 }: {
   onRun: () => void | Promise<void>;
   onPause: () => void;
@@ -20,21 +20,22 @@ function Header({
   onClear: () => void;
   onExport: () => void;
   onImport: React.ChangeEventHandler<HTMLInputElement>;
-  onAddSample: (sampleType: 'summarizer' | 'rag' | 'multi-agent' | 'keyword-router' | 'llm-judge-router' | 'refine-loop' | 'web-search' | 'code-gen' | 'api-fetch' | 'db-report' | 'research-code') => void;
+  onSaveAsTemplate: () => void;
 }) {
   const executionStatus = useWorkflowStore(s => s.executionStatus);
   const compareMode = useWorkflowStore(s => s.compareMode);
   const compareProviders = useWorkflowStore(s => s.compareProviders);
   const runStats = useWorkflowStore(s => s.runStats);
   const statsOpen = useWorkflowStore(s => s.statsOpen);
+  const nodes = useWorkflowStore(s => s.nodes);
+  const workflowName = useWorkflowStore(s => s.workflowName);
+  const setWorkflowName = useWorkflowStore(s => s.setWorkflowName);
   const setCompareMode = useWorkflowStore(s => s.setCompareMode);
   const setCompareProviders = useWorkflowStore(s => s.setCompareProviders);
   const setCompareLogs = useWorkflowStore(s => s.setCompareLogs);
   const compareControls = useWorkflowStore(s => s.compareControls);
   const setStatsOpen = useWorkflowStore(s => s.setStatsOpen);
   const setSettingsOpen = useWorkflowStore(s => s.setSettingsOpen);
-  const workflowName = useWorkflowStore(s => s.workflowName);
-  const setWorkflowName = useWorkflowStore(s => s.setWorkflowName);
 
   const handleToggleCompare = () => {
     setCompareMode(!compareMode);
@@ -43,9 +44,7 @@ function Header({
 
   const handleChangeCompareProviders = (ps: typeof compareProviders) => {
     setCompareProviders(ps);
-    while (compareControls.length < ps.length) {
-      compareControls.push({ current: 'idle' });
-    }
+    while (compareControls.length < ps.length) compareControls.push({ current: 'idle' });
     compareControls.splice(ps.length);
     setCompareLogs(ps.map(() => []));
   };
@@ -68,7 +67,8 @@ function Header({
         onClear={onClear}
         onExport={onExport}
         onImport={onImport}
-        onAddSample={onAddSample}
+        onSaveAsTemplate={onSaveAsTemplate}
+        canSaveAsTemplate={nodes.length > 0}
         onSettings={() => setSettingsOpen(true)}
         compareMode={compareMode}
         onToggleCompare={handleToggleCompare}
