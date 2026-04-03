@@ -24,8 +24,18 @@ export function migrate(db: Database.Database): void {
       node_name TEXT,
       output    TEXT
     );
+    CREATE TABLE IF NOT EXISTS templates (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      description TEXT,
+      created_at  INTEGER NOT NULL,
+      node_count  INTEGER NOT NULL,
+      node_types  TEXT NOT NULL,
+      workflow    TEXT NOT NULL
+    );
     CREATE INDEX IF NOT EXISTS idx_runs_started_at ON runs(started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_run_outputs_run_id ON run_outputs(run_id);
+    CREATE INDEX IF NOT EXISTS idx_templates_created_at ON templates(created_at DESC);
   `);
 }
 
