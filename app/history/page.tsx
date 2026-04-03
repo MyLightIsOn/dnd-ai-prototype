@@ -1,8 +1,10 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { StatsBar } from '@/components/history/stats-bar';
 import { TrendCharts } from '@/components/history/trend-charts';
-import { RunTable, type RunSummary } from '@/components/history/run-table';
+import { RunTable } from '@/components/history/run-table';
+import { RunDetailDrawer } from '@/components/history/run-detail-drawer';
+import { ImportButton } from '@/components/history/import-button';
 
 interface StatsResponse {
   total: number;
@@ -28,41 +30,59 @@ const EMPTY_STATS: StatsResponse = {
 
 export default function HistoryPage() {
   const [stats, setStats] = useState<StatsResponse>(EMPTY_STATS);
-  const [loading, setLoading] = useState(true);
-  // TODO: wire to RunDetailDrawer in Task 11
+  const [statsLoading, setStatsLoading] = useState(true);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [tableKey, setTableKey] = useState(0);
 
-  useEffect(() => {
+  const fetchStats = useCallback(() => {
+    setStatsLoading(true);
     fetch('/api/runs/stats')
       .then((r) => r.json())
       .then(setStats)
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(() => setStatsLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  const handleImported = () => {
+    fetchStats();
+    setTableKey((k) => k + 1); // force RunTable to refetch
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <h1 className="text-2xl font-semibold text-gray-900">Run History</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-gray-900">Run History</h1>
+        <ImportButton onImported={handleImported} />
+      </div>
 
-      {loading ? (
+      {statsLoading ? (
         <div className="text-gray-400 text-sm">Loading…</div>
       ) : (
-        <>
-          <StatsBar stats={stats} />
-          <TrendCharts
-            trend={stats.trend}
-            statusCounts={{
-              completed: stats.completed,
-              error: stats.error,
-              cancelled: stats.cancelled,
-            }}
-            models={stats.models}
-          />
-        </>
+        <StatsBar stats={stats} />
       )}
 
-      <RunTable onView={(run) => setSelectedRunId(run.id)} />
-      {/* RunDetailDrawer will be added in the next task */}
+      {!statsLoading && (
+        <TrendCharts
+          trend={stats.trend}
+          statusCounts={{
+            completed: stats.completed,
+            error: stats.error,
+            cancelled: stats.cancelled,
+          }}
+          models={stats.models}
+        />
+      )}
+
+      <RunTable key={tableKey} onView={(run) => setSelectedRunId(run.id)} />
+
+      <RunDetailDrawer
+        runId={selectedRunId}
+        onClose={() => setSelectedRunId(null)}
+      />
     </div>
   );
 }
