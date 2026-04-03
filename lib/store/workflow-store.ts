@@ -255,7 +255,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     // Collect node outputs for history save
     const collectedOutputs = new Map<string, string>();
     const unsubOutputs = emitter.on('node:complete', (e) => {
-      collectedOutputs.set(e.nodeId, e.output);
+      if (e.type === 'node:complete') collectedOutputs.set(e.nodeId, e.output);
     });
 
     const cleanup = createStoreBridge(emitter, {
