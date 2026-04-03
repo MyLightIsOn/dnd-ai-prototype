@@ -55,7 +55,7 @@ export function RunDetailDrawer({ runId, onClose }: RunDetailDrawerProps) {
     setWorkflowExpanded(false);
     setOpenOutputs(new Set());
     fetch(`/api/runs/${runId}`)
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then(setRun)
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -73,7 +73,13 @@ export function RunDetailDrawer({ runId, onClose }: RunDetailDrawerProps) {
 
   const handleRestore = () => {
     if (!run) return;
-    const workflow = JSON.parse(run.workflow) as { nodes: TypedNode[]; edges: Edge[] };
+    let workflow: { nodes: TypedNode[]; edges: Edge[] };
+    try {
+      workflow = JSON.parse(run.workflow) as { nodes: TypedNode[]; edges: Edge[] };
+    } catch {
+      console.error('Failed to parse workflow JSON');
+      return;
+    }
     setNodes(workflow.nodes);
     setEdges(workflow.edges);
     setWorkflowName(run.name);
@@ -81,11 +87,11 @@ export function RunDetailDrawer({ runId, onClose }: RunDetailDrawerProps) {
     router.push('/');
   };
 
-  const toggleOutput = (nodeId: string) => {
+  const toggleOutput = (outputId: string) => {
     setOpenOutputs((prev) => {
       const next = new Set(prev);
-      if (next.has(nodeId)) next.delete(nodeId);
-      else next.add(nodeId);
+      if (next.has(outputId)) next.delete(outputId);
+      else next.add(outputId);
       return next;
     });
   };
@@ -171,12 +177,12 @@ export function RunDetailDrawer({ runId, onClose }: RunDetailDrawerProps) {
                       <div key={o.id} className="border rounded-lg overflow-hidden">
                         <button
                           className="w-full text-left px-3 py-2 bg-gray-50 text-sm font-medium hover:bg-gray-100 flex items-center justify-between"
-                          onClick={() => toggleOutput(o.node_id)}
+                          onClick={() => toggleOutput(o.id)}
                         >
                           <span>{o.node_name ?? o.node_id}</span>
-                          <span className="text-gray-400">{openOutputs.has(o.node_id) ? '▲' : '▼'}</span>
+                          <span className="text-gray-400">{openOutputs.has(o.id) ? '▲' : '▼'}</span>
                         </button>
-                        {openOutputs.has(o.node_id) && (
+                        {openOutputs.has(o.id) && (
                           <pre className="px-3 py-2 text-xs text-gray-700 whitespace-pre-wrap bg-white max-h-48 overflow-y-auto">
                             {o.output ?? '(empty)'}
                           </pre>
@@ -195,11 +201,15 @@ export function RunDetailDrawer({ runId, onClose }: RunDetailDrawerProps) {
                 >
                   Workflow JSON {workflowExpanded ? '▲' : '▼'}
                 </button>
-                {workflowExpanded && (
-                  <pre className="mt-2 p-3 bg-gray-50 rounded-lg text-xs text-gray-700 max-h-64 overflow-auto whitespace-pre-wrap">
-                    {JSON.stringify(JSON.parse(run.workflow), null, 2)}
-                  </pre>
-                )}
+                {workflowExpanded && (() => {
+                  let pretty = run.workflow;
+                  try { pretty = JSON.stringify(JSON.parse(run.workflow), null, 2); } catch { /* use raw */ }
+                  return (
+                    <pre className="mt-2 p-3 bg-gray-50 rounded-lg text-xs text-gray-700 max-h-64 overflow-auto whitespace-pre-wrap">
+                      {pretty}
+                    </pre>
+                  );
+                })()}
               </div>
             </>
           )}

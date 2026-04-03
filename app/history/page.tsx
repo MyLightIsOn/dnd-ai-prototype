@@ -37,7 +37,7 @@ export default function HistoryPage() {
   const fetchStats = useCallback(() => {
     setStatsLoading(true);
     fetch('/api/runs/stats')
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then(setStats)
       .catch(console.error)
       .finally(() => setStatsLoading(false));
