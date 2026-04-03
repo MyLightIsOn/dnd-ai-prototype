@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { StatsBar } from '@/components/history/stats-bar';
 import { TrendCharts } from '@/components/history/trend-charts';
+import { RunTable, type RunSummary } from '@/components/history/run-table';
 
 interface StatsResponse {
   total: number;
@@ -28,6 +29,7 @@ const EMPTY_STATS: StatsResponse = {
 export default function HistoryPage() {
   const [stats, setStats] = useState<StatsResponse>(EMPTY_STATS);
   const [loading, setLoading] = useState(true);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/runs/stats')
@@ -58,7 +60,8 @@ export default function HistoryPage() {
         </>
       )}
 
-      {/* Run table will be added in the next task */}
+      <RunTable onView={(run) => setSelectedRunId(run.id)} />
+      {/* RunDetailDrawer will be added in the next task */}
     </div>
   );
 }
