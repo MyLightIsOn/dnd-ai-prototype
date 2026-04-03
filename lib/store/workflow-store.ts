@@ -30,6 +30,9 @@ interface WorkflowState {
   // Settings
   settingsOpen: boolean;
 
+  // Workflow metadata
+  workflowName: string;
+
   // Execution control (mutable ref-like objects — same shape as React.MutableRefObject)
   executionControl: { current: ExecutionStatus };
   errorRecoveryAction: { current: 'retry' | 'skip' | 'abort' | null };
@@ -55,6 +58,7 @@ interface WorkflowState {
   setRunStats: (stats: RunStats[] | null) => void;
   setStatsOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
+  setWorkflowName: (name: string) => void;
   setCompareControls: (controls: Array<{ current: ExecutionStatus }>) => void;
   setReviewRequest: (req: import('@/lib/execution/events').ReviewRequest | null) => void;
   setReviewDecision: (decision: import('@/lib/execution/node-executor').ReviewDecisionResult | null) => void;
@@ -78,6 +82,7 @@ export const initialWorkflowState = {
   runStats: null as RunStats[] | null,
   statsOpen: false,
   settingsOpen: false,
+  workflowName: 'Untitled',
   executionControl: { current: 'idle' as ExecutionStatus },
   errorRecoveryAction: { current: null as 'retry' | 'skip' | 'abort' | null },
   reviewDecision: { current: null as import('@/lib/execution/node-executor').ReviewDecisionResult | null },
@@ -204,6 +209,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   setRunStats: (stats) => set({ runStats: stats }),
   setStatsOpen: (open) => set({ statsOpen: open }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
+  setWorkflowName: (name) => set({ workflowName: name }),
   setCompareControls: (controls) => set({ compareControls: controls }),
   setReviewRequest: (req) => set({ reviewRequest: req }),
   setReviewDecision: (decision) => set(state => {

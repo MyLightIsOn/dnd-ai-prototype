@@ -33,6 +33,8 @@ function Header({
   const compareControls = useWorkflowStore(s => s.compareControls);
   const setStatsOpen = useWorkflowStore(s => s.setStatsOpen);
   const setSettingsOpen = useWorkflowStore(s => s.setSettingsOpen);
+  const workflowName = useWorkflowStore(s => s.workflowName);
+  const setWorkflowName = useWorkflowStore(s => s.setWorkflowName);
 
   const handleToggleCompare = () => {
     setCompareMode(!compareMode);
@@ -41,7 +43,6 @@ function Header({
 
   const handleChangeCompareProviders = (ps: typeof compareProviders) => {
     setCompareProviders(ps);
-    // Sync compareControls to match new provider count
     while (compareControls.length < ps.length) {
       compareControls.push({ current: 'idle' });
     }
@@ -51,7 +52,13 @@ function Header({
 
   return (
     <div className="col-span-3 flex items-center justify-between">
-      <div className="text-xl font-semibold">Multi‑Agent Workflow Editor</div>
+      <input
+        type="text"
+        value={workflowName}
+        onChange={(e) => setWorkflowName(e.target.value)}
+        className="text-xl font-semibold bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-400 rounded px-1 min-w-0 max-w-[280px] truncate"
+        aria-label="Workflow name"
+      />
       <Toolbar
         onRun={onRun}
         onPause={onPause}
