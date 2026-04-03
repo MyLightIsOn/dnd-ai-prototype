@@ -281,8 +281,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       const { stats } = await runParallel(get().nodes, get().edges, engine, options);
       setRunStats([stats]);
       finalCostUsd = stats.totalCostUsd ?? null;
-      const ctrl: string = executionControl.current;
-      if (ctrl === 'cancelled') finalStatus = 'cancelled';
+      if ((executionControl.current as ExecutionStatus) === 'cancelled') finalStatus = 'cancelled';
     } catch {
       finalStatus = 'error';
     } finally {
