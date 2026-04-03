@@ -29,6 +29,7 @@ const EMPTY_STATS: StatsResponse = {
 export default function HistoryPage() {
   const [stats, setStats] = useState<StatsResponse>(EMPTY_STATS);
   const [loading, setLoading] = useState(true);
+  // TODO: wire to RunDetailDrawer in Task 11
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   useEffect(() => {

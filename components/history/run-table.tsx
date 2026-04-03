@@ -17,7 +17,7 @@ interface RunTableProps {
 
 const PAGE_SIZE = 25;
 
-const STATUS_BADGE: Record<string, string> = {
+const STATUS_BADGE: Record<RunSummary['status'], string> = {
   completed: 'bg-green-100 text-green-700',
   error: 'bg-red-100 text-red-700',
   cancelled: 'bg-yellow-100 text-yellow-700',
@@ -44,6 +44,7 @@ export function RunTable({ onView }: RunTableProps) {
   const [loading, setLoading] = useState(true);
 
   const fetchRuns = useCallback(() => {
+    const controller = new AbortController();
     setLoading(true);
     const params = new URLSearchParams({
       limit: String(PAGE_SIZE),
@@ -52,29 +53,27 @@ export function RunTable({ onView }: RunTableProps) {
     if (search) params.set('search', search);
     if (status) params.set('status', status);
 
-    fetch(`/api/runs?${params}`)
-      .then((r) => r.json())
+    fetch(`/api/runs?${params}`, { signal: controller.signal })
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((data) => {
         setRuns(data.runs ?? []);
         setTotal(data.total ?? 0);
       })
-      .catch(console.error)
+      .catch((err) => { if (err.name !== 'AbortError') console.error(err); })
       .finally(() => setLoading(false));
+
+    return () => controller.abort();
   }, [page, search, status]);
 
   useEffect(() => {
-    fetchRuns();
+    const cancel = fetchRuns();
+    return cancel;
   }, [fetchRuns]);
-
-  // Reset to page 0 when filters change
-  useEffect(() => {
-    setPage(0);
-  }, [search, status]);
 
   const handleDelete = (id: string) => {
     if (!confirm('Delete this run?')) return;
     fetch(`/api/runs/${id}`, { method: 'DELETE' })
-      .then(() => fetchRuns())
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return fetchRuns(); })
       .catch(console.error);
   };
 
@@ -82,7 +81,9 @@ export function RunTable({ onView }: RunTableProps) {
     const a = document.createElement('a');
     a.href = `/api/runs/${id}/export`;
     a.download = `run-${name}.json`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
   };
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -95,12 +96,12 @@ export function RunTable({ onView }: RunTableProps) {
           type="text"
           placeholder="Search by name…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setPage(0); }}
           className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 w-56"
         />
         <select
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e) => { setStatus(e.target.value); setPage(0); }}
           className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
         >
           <option value="">All statuses</option>
