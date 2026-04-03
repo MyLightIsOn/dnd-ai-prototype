@@ -1,5 +1,5 @@
 'use client';
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   LineChart,
   Line,
@@ -38,31 +38,44 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: '#f59e0b',
 };
 
-function formatMs(ts: number): string {
+function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 export function TrendCharts({ trend, statusCounts, models }: TrendChartsProps) {
-  // Cost over time — oldest first for left-to-right timeline
-  const costData = [...trend]
-    .reverse()
-    .map((p) => ({
-      date: formatMs(p.started_at),
-      cost: p.total_cost ?? 0,
-    }));
+  // `trend` arrives newest-first from the API (ordered by started_at DESC),
+  // so .reverse() produces oldest-first for left-to-right display.
+  const costData = useMemo(
+    () =>
+      [...trend]
+        .reverse()
+        .map((p) => ({
+          date: formatDate(p.started_at),
+          cost: p.total_cost ?? 0,
+        })),
+    [trend],
+  );
 
   // Status breakdown for donut
-  const statusData = [
-    { name: 'Completed', value: statusCounts.completed, color: STATUS_COLORS.completed },
-    { name: 'Error', value: statusCounts.error, color: STATUS_COLORS.error },
-    { name: 'Cancelled', value: statusCounts.cancelled, color: STATUS_COLORS.cancelled },
-  ].filter((d) => d.value > 0);
+  const statusData = useMemo(
+    () =>
+      [
+        { name: 'Completed', value: statusCounts.completed, color: STATUS_COLORS.completed },
+        { name: 'Error', value: statusCounts.error, color: STATUS_COLORS.error },
+        { name: 'Cancelled', value: statusCounts.cancelled, color: STATUS_COLORS.cancelled },
+      ].filter((d) => d.value > 0),
+    [statusCounts],
+  );
 
   // Model usage
-  const modelData = models.map((m) => ({
-    model: m.model.split('/').pop() ?? m.model, // shorten "openai/gpt-4o-mini" → "gpt-4o-mini"
-    count: m.count,
-  }));
+  const modelData = useMemo(
+    () =>
+      models.map((m) => ({
+        model: m.model.split('/').pop() ?? m.model, // shorten "openai/gpt-4o-mini" → "gpt-4o-mini"
+        count: m.count,
+      })),
+    [models],
+  );
 
   return (
     <div className="grid grid-cols-3 gap-4">
@@ -99,8 +112,8 @@ export function TrendCharts({ trend, statusCounts, models }: TrendChartsProps) {
                 outerRadius={65}
                 dataKey="value"
               >
-                {statusData.map((entry, i) => (
-                  <Cell key={i} fill={entry.color} />
+                {statusData.map((entry) => (
+                  <Cell key={entry.name} fill={entry.color} />
                 ))}
               </Pie>
               <Tooltip />

@@ -44,19 +44,18 @@ export default function HistoryPage() {
       {loading ? (
         <div className="text-gray-400 text-sm">Loading…</div>
       ) : (
-        <StatsBar stats={stats} />
-      )}
-
-      {!loading && (
-        <TrendCharts
-          trend={stats.trend}
-          statusCounts={{
-            completed: stats.completed,
-            error: stats.error,
-            cancelled: stats.cancelled,
-          }}
-          models={stats.models}
-        />
+        <>
+          <StatsBar stats={stats} />
+          <TrendCharts
+            trend={stats.trend}
+            statusCounts={{
+              completed: stats.completed,
+              error: stats.error,
+              cancelled: stats.cancelled,
+            }}
+            models={stats.models}
+          />
+        </>
       )}
 
       {/* Run table will be added in the next task */}
