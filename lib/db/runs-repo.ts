@@ -81,11 +81,11 @@ export function listRuns(
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  return db.prepare(`
+  return db.prepare<typeof params, RunRow>(`
     SELECT * FROM runs ${where}
     ORDER BY started_at DESC
     LIMIT @limit OFFSET @offset
-  `).all(params) as RunRow[];
+  `).all(params);
 }
 
 export function countRuns(
@@ -106,7 +106,7 @@ export function countRuns(
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const row = db.prepare(`SELECT COUNT(*) as n FROM runs ${where}`).get(params) as { n: number } | undefined;
+  const row = db.prepare<typeof params, { n: number }>(`SELECT COUNT(*) as n FROM runs ${where}`).get(params);
   return row?.n ?? 0;
 }
 
@@ -114,9 +114,9 @@ export function getRunById(
   db: Database.Database,
   id: string
 ): (RunRow & { outputs: RunOutputRow[] }) | null {
-  const run = db.prepare('SELECT * FROM runs WHERE id = ?').get(id) as RunRow | undefined;
+  const run = db.prepare<[string], RunRow>('SELECT * FROM runs WHERE id = ?').get(id);
   if (!run) return null;
-  const outputs = db.prepare('SELECT * FROM run_outputs WHERE run_id = ?').all(id) as RunOutputRow[];
+  const outputs = db.prepare<[string], RunOutputRow>('SELECT * FROM run_outputs WHERE run_id = ?').all(id);
   return { ...run, outputs };
 }
 
@@ -126,7 +126,7 @@ export function deleteRun(db: Database.Database, id: string): boolean {
 }
 
 export function getRunStats(db: Database.Database): RunStatsRow {
-  return db.prepare(`
+  return db.prepare<[], RunStatsRow>(`
     SELECT
       COUNT(*) AS total,
       SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
@@ -144,16 +144,16 @@ export function getRunTrend(
   db: Database.Database,
   limit = 30
 ): Pick<RunRow, 'started_at' | 'total_cost' | 'status'>[] {
-  return db.prepare(`
+  return db.prepare<[number], Pick<RunRow, 'started_at' | 'total_cost' | 'status'>>(`
     SELECT started_at, total_cost, status
     FROM runs
     ORDER BY started_at DESC
     LIMIT ?
-  `).all(limit) as Pick<RunRow, 'started_at' | 'total_cost' | 'status'>[];
+  `).all(limit);
 }
 
 export function getModelUsage(db: Database.Database): ModelUsageRow[] {
-  return db.prepare(`
+  return db.prepare<[], ModelUsageRow>(`
     SELECT
       json_extract(value, '$.data.model') AS model,
       COUNT(*) AS count
@@ -163,5 +163,5 @@ export function getModelUsage(db: Database.Database): ModelUsageRow[] {
     GROUP BY model
     ORDER BY count DESC
     LIMIT 10
-  `).all() as ModelUsageRow[];
+  `).all();
 }
