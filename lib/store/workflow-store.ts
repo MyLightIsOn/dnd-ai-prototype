@@ -251,6 +251,13 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
     // Create emitter and bridge
     const emitter = new ExecutionEventEmitter();
+
+    // Collect node outputs for history save
+    const collectedOutputs = new Map<string, string>();
+    const unsubOutputs = emitter.on('node:complete', (e) => {
+      collectedOutputs.set(e.nodeId, e.output);
+    });
+
     const cleanup = createStoreBridge(emitter, {
       setLogs: get().setLogs,
       setNodes: get().setNodes,
@@ -266,17 +273,58 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       reviewDecision,
     };
 
+    const startedAt = Date.now();
+    let finalStatus: 'completed' | 'error' | 'cancelled' = 'completed';
+    let finalCostUsd: number | null = null;
+
     try {
       const { stats } = await runParallel(get().nodes, get().edges, engine, options);
       setRunStats([stats]);
+      finalCostUsd = stats.totalCostUsd ?? null;
+      const ctrl: string = executionControl.current;
+      if (ctrl === 'cancelled') finalStatus = 'cancelled';
+    } catch {
+      finalStatus = 'error';
     } finally {
+      unsubOutputs();
       cleanup();
-      // Reset to idle after completion (unless already cancelled)
+
       const currentStatus = executionControl.current;
       if (currentStatus === 'running' || currentStatus === 'paused') {
         set({ executionStatus: 'idle' });
         executionControl.current = 'idle';
       }
+
+      // Auto-save to history (fire-and-forget)
+      const nodes = get().nodes;
+      const edges = get().edges;
+      const runId = crypto.randomUUID();
+      const outputs = nodes
+        .filter((n) => collectedOutputs.has(n.id))
+        .map((n) => ({
+          id: crypto.randomUUID(),
+          node_id: n.id,
+          node_name: (n.data as { name?: string }).name ?? n.type ?? null,
+          output: collectedOutputs.get(n.id) ?? null,
+        }));
+
+      fetch('/api/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: runId,
+          name: get().workflowName || 'Untitled',
+          started_at: startedAt,
+          finished_at: Date.now(),
+          status: finalStatus,
+          total_cost: finalCostUsd,
+          node_count: nodes.length,
+          workflow: { nodes, edges },
+          outputs,
+        }),
+      }).catch((err) => {
+        console.error('[auto-save] Failed to save run to history:', err);
+      });
     }
   },
 }));
