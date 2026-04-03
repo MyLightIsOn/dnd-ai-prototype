@@ -55,8 +55,8 @@ export function WelcomeDialog() {
         </div>
 
         <div className="bg-indigo-50 rounded-lg p-3 text-sm text-indigo-800">
-          <span className="font-medium">Get started:</span> click the{" "}
-          <span className="font-medium">Samples</span> button in the toolbar to
+          <span className="font-medium">Get started:</span> visit the{" "}
+          <span className="font-medium">Templates</span> page to
           load a pre-built workflow, then hit <span className="font-medium">Run</span> to see it in action.
         </div>
 

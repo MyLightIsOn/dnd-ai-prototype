@@ -37,7 +37,7 @@ Build workflows by connecting nodes on a canvas — Prompt, Agent, Tool, Router,
 - **Document processing** — PDF, TXT, MD, and code file support with chunking
 - **Cost tracking** — per-run token usage and estimated cost per provider
 - **Import/export** — save and share workflows as JSON
-- **Sample workflows** — 11 pre-built workflows covering common patterns
+- **Workflow templates** — 11 pre-built workflows covering common patterns available on the Templates page
 
 ---
 
@@ -58,7 +58,7 @@ Open [http://localhost:3000](http://localhost:3000). No API keys are required to
 
 ## API key setup
 
-To run live LLM calls, click the **Settings** button in the toolbar (the top bar that also contains Run, Samples, Export, and Import). Enter your API keys for any providers you want to use:
+To run live LLM calls, click the **Settings** button in the toolbar (the top bar that also contains Run, Templates, Export, and Import). Enter your API keys for any providers you want to use:
 
 | Provider | Where to get a key |
 |---|---|
@@ -362,9 +362,9 @@ The Result node is a terminal node that displays the final output of the workflo
 
 ---
 
-## Sample workflows
+## Workflow templates
 
-Open the **Samples** menu in the toolbar to load any of the pre-built workflows below. Each one loads directly into the canvas as a starting point you can modify.
+Visit the **Templates** page to load any of the pre-built workflows below. Each one loads directly into the canvas as a starting point you can modify.
 
 | Sample | Nodes | Demonstrates |
 |---|---|---|
