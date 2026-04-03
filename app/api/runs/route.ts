@@ -27,7 +27,7 @@ interface CreateRunBody {
   finished_at: number | null;
   status: 'completed' | 'error' | 'cancelled';
   total_cost: number | null;
-  node_count: number;
+  node_count: number | null;
   workflow: { nodes: unknown[]; edges: unknown[] };
   outputs: Array<{
     id: string;
