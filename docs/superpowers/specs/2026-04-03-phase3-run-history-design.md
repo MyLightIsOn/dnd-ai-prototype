@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS run_outputs (
 |---|---|---|
 | `GET` | `/api/runs` | List runs. Query params: `status`, `search` (name), `limit`, `offset` |
 | `GET` | `/api/runs/[id]` | Single run with all outputs |
+| `GET` | `/api/runs/stats` | Aggregate stats (total, success rate, total cost, avg duration) for charts |
 | `POST` | `/api/runs` | Create run (called by store after execution) |
 | `DELETE` | `/api/runs/[id]` | Delete run and cascade outputs |
 | `GET` | `/api/runs/[id]/export` | Download run as JSON file |
@@ -76,22 +77,26 @@ All routes live in `app/api/runs/`.
 
 The Zustand store's `run()` action (`lib/store/workflow-store.ts`) saves in its `finally` block, after `runParallel` resolves. This covers all terminal states: completed, error, and cancelled.
 
-### Payload helper
+### Output collection
+
+Node outputs are not stored on node data — they live in the `nodeOutputs: Record<Id, string>` map local to `runParallel`. The store collects them by subscribing to `node:complete` events from the `ExecutionEventEmitter` during the run:
 
 ```typescript
-// lib/store/collect-outputs.ts
-export function collectNodeOutputs(nodes: TypedNode[]): RunOutput[] {
-  return nodes
-    .filter(n => n.data.executionOutput != null)
-    .map(n => ({
-      id: crypto.randomUUID(),
-      run_id: '',           // filled in by API route
-      node_id: n.id,
-      node_name: n.data.name ?? n.type,
-      output: String(n.data.executionOutput)
-    }))
+// Inside run() action, before calling runParallel:
+const collectedOutputs: Map<string, string> = new Map();
+const unsub = engine.emitter.on('node:complete', (e) => {
+  collectedOutputs.set(e.nodeId, e.output);
+});
+
+try {
+  await runParallel(nodes, edges, engine, options);
+} finally {
+  unsub();
+  // save to history using collectedOutputs + get().nodes for node names
 }
 ```
+
+Node names are looked up from `get().nodes` after the run completes.
 
 ### Error handling
 
@@ -207,7 +212,7 @@ lib/
     index.ts                         # getDb() singleton
     runs-repo.ts                     # insertRun, listRuns, getRunById, deleteRun
   store/
-    collect-outputs.ts               # collectNodeOutputs helper
+    # no new file needed — output collection inlined in run() action
 ```
 
 ---
@@ -216,8 +221,7 @@ lib/
 
 | File | Change |
 |---|---|
-| `lib/store/workflow-store.ts` | Add auto-save `fetch` in `run()` finally block |
-| `app/history/page.tsx` | New page (no existing file) |
+| `lib/store/workflow-store.ts` | Add `workflowName` state + setter; add `node:complete` subscriber + auto-save `fetch` in `run()` finally block |
 | `package.json` | Add `better-sqlite3` + `@types/better-sqlite3` + `recharts` |
 | `data/.gitkeep` | New `data/` directory, gitignored for `*.db` |
 | `.gitignore` | Add `data/` |
