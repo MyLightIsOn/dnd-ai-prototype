@@ -52,3 +52,6 @@ next-env.d.ts
 .idea/
 CLAUDE.md
 docs/
+
+# sqlite database
+data/*.db
