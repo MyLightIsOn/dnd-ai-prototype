@@ -1,6 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import { StatsBar } from '@/components/history/stats-bar';
+import { TrendCharts } from '@/components/history/trend-charts';
 
 interface StatsResponse {
   total: number;
@@ -46,7 +47,19 @@ export default function HistoryPage() {
         <StatsBar stats={stats} />
       )}
 
-      {/* Trend charts and run table will be added in subsequent tasks */}
+      {!loading && (
+        <TrendCharts
+          trend={stats.trend}
+          statusCounts={{
+            completed: stats.completed,
+            error: stats.error,
+            cancelled: stats.cancelled,
+          }}
+          models={stats.models}
+        />
+      )}
+
+      {/* Run table will be added in the next task */}
     </div>
   );
 }
