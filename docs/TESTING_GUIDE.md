@@ -1,942 +1,878 @@
-# Testing Guide - Multi-Agent Workflow Studio
+# Testing Guide — Inference Sandbox
 
-**Phase 1 Complete** - Ready for Testing
-**Branch:** `phase-1/foundation`
-**Date:** January 16, 2026
+**Covers all phases through Phase 4 (Templates)**
+**Last updated:** 2026-04-25
 
 ---
 
 ## Prerequisites
 
-### 1. Get API Keys
-
-You'll need at least one API key to test live execution:
-
-- **OpenAI** (Recommended for first test)
-  - Go to: https://platform.openai.com/api-keys
-  - Click "Create new secret key"
-  - Copy the key (starts with `sk-`)
-  - Cost: ~$0.001 per test (using gpt-4o-mini)
-
-- **Anthropic** (Optional)
-  - Go to: https://console.anthropic.com/
-  - Click "Get API Keys"
-  - Create a new key
-  - Cost: ~$0.003 per test (using claude-haiku-4)
-
-- **Google AI** (Optional)
-  - Go to: https://aistudio.google.com/
-  - Get API key from settings
-  - Cost: Free tier available
-
-- **Ollama** (Optional - Local)
-  - Install from: https://ollama.ai
-  - Run: `ollama pull llama3.2`
-  - No API key needed, runs locally
-
-### 2. Start the Development Server
+### Start the Dev Server
 
 ```bash
-# Make sure you're on the correct branch
-git checkout phase-1/foundation
-
-# Install dependencies (if not already done)
-pnpm install
-
-# Start dev server
-pnpm dev
+pnpm install   # if not already done
+pnpm dev       # starts at http://localhost:3000
 ```
 
-Open http://localhost:3000 in your browser.
+### Get API Keys (for live execution tests)
+
+At least one key is needed to test live execution. Mock mode tests require no keys.
+
+| Provider | Where to get it | Cost per test |
+|----------|----------------|---------------|
+| OpenAI | platform.openai.com/api-keys | ~$0.001 (gpt-4o-mini) |
+| Anthropic | console.anthropic.com | ~$0.003 (claude-haiku-4) |
+| Google AI | aistudio.google.com | Free tier available |
+| Ollama | ollama.ai (local install) | Free |
+
+Add keys via **Settings** (⚙️ gear icon in toolbar). Click **Test** next to each key, then **Save**.
 
 ---
 
-## Test Suite
+## Node Types Reference
 
-### Test 1: Settings & API Key Configuration ⚙️
+| Node | Purpose |
+|------|---------|
+| **Prompt** | Initial text input |
+| **Document** | File upload (PDF, TXT, MD, JS, TS, PY, JSON) |
+| **Chunker** | Splits text into fixed or semantic chunks |
+| **Agent** | Calls an LLM (mock or live) |
+| **Tool** | Web Search, HTTP, Code Exec, or Database |
+| **Router** | Conditional branching |
+| **Loop** | Iteration with break conditions |
+| **Memory** | Read/write to workflow or global memory |
+| **Human Review** | Pauses for manual approval |
+| **Result** | Displays terminal output |
 
-**What it tests:** Settings panel, API key storage, validation
-
-**Steps:**
-1. Click the **Settings** icon (⚙️) in the top toolbar
-2. Settings modal should open
-3. Find the **OpenAI** section
-4. Click in the API key input field
-5. Paste your OpenAI API key (starts with `sk-`)
-6. Click the **Test** button next to the input
-7. Wait for validation (~2-3 seconds)
-8. Status should change to **✓ Connected**
-9. Click **Save** button at bottom
-10. Close modal by clicking X or outside
-
-**Expected Results:**
-- ✅ Settings modal opens smoothly
-- ✅ API key is masked (shows •••• instead of actual key)
-- ✅ Test button shows loading spinner during validation
-- ✅ Status updates to "Connected" with green checkmark
-- ✅ Save button stores the key
-- ✅ Modal closes properly
-
-**Troubleshooting:**
-- If validation fails: Check API key is correct and has credits
-- If "Invalid API key" shows: Key may be incorrect or expired
-- If timeout: Check internet connection
+All nodes cycle through states: **gray (idle) → blue pulsing (executing) → green (completed) / red (error)**.
 
 ---
 
-### Test 2: Basic Agent Node (Mock Mode) 🤖
+## Section 1 — Core Setup
 
-**What it tests:** Agent nodes, properties panel, mock execution
+### Test 1: Settings & API Keys
 
-**Steps:**
-1. From the **Palette** (left sidebar), drag **Agent** onto the canvas
-2. Click the agent node to select it
-3. Properties panel opens on right
-4. In the **Prompt** field, type: `"Write a haiku about coding"`
-5. Verify **Mode** is set to **Mock** (default)
-6. From palette, drag **Result** node onto canvas
-7. Connect Agent → Result:
-   - Hover over Agent node's **top edge** (source handle appears)
-   - Drag from top of Agent to **bottom edge** of Result
-   - Arrow should appear connecting them
-8. Click the **Run** button (▶) in toolbar
-9. Watch the console (bottom panel)
+1. Click the **Settings** ⚙️ button in the toolbar
+2. Enter your OpenAI API key in the OpenAI field
+3. Click **Test** — status should update to **✓ Connected**
+4. Click **Save** and close
 
-**Expected Results:**
-- ✅ Agent node appears on canvas
-- ✅ Properties panel shows agent settings
-- ✅ Can type in prompt field
-- ✅ Connection arrow appears between nodes
-- ✅ Console shows: `🤖 Agent 1 (mock) ... [random string]`
-- ✅ Execution completes with: `✅ Done.`
-- ✅ No errors in console
-
-**Troubleshooting:**
-- If can't drag: Make sure you're dragging from the node item, not clicking
-- If can't connect: Drag from top handle (source) to bottom handle (target)
-- If nothing happens on Run: Check nodes are connected
+**Expected:** Key is masked (••••), test spinner appears, green checkmark on success.
 
 ---
 
-### Test 3: Live Agent Execution with Streaming 🚀
+### Test 2: Workflow Name
 
-**What it tests:** Real LLM API calls, streaming, cost tracking
+1. Click the workflow name in the top-left header (defaults to something like "My Workflow")
+2. Type a new name
+3. Refresh the page (or navigate away and back)
 
-**Steps:**
-1. Clear canvas: Click **Clear** button in toolbar
-2. Drag new **Agent** node onto canvas
-3. Select the agent node
-4. In properties panel:
-   - **Name**: `"Poet"`
-   - **Model**: Select `openai/gpt-4o-mini` from dropdown
-   - **Mode**: Click **Live** radio button
-   - **Streaming**: Check the checkbox
-   - **Prompt**: `"Write a haiku about AI and creativity"`
-5. Drag **Result** node onto canvas
-6. Connect: Poet → Result
-7. Click **Run** ▶
-8. Watch the console closely
-
-**Expected Results:**
-- ✅ Node border turns **blue** and pulses (executing state)
-- ✅ Console shows: `🤖 Poet: [streaming text appears character by character]`
-- ✅ Text streams in real-time with cursor: `▌`
-- ✅ When complete:
-  - Full haiku visible
-  - Cost displayed: `💰 Cost: $0.0003 | Tokens: 45` (approximate)
-  - Node border turns **green** (completed)
-- ✅ Console auto-scrolls to show latest output
-- ✅ Total execution time: 2-5 seconds
-
-**Troubleshooting:**
-- If "Invalid OpenAI API key": Go back to Settings, re-enter key
-- If "Rate limit exceeded": Wait 60 seconds and try again
-- If no streaming: Verify streaming checkbox is checked
-- If very slow: Network latency, normal for first request
+**Expected:** Name persists in the input field.
 
 ---
 
-### Test 4: Non-Streaming Execution 📝
+## Section 2 — Basic Execution
 
-**What it tests:** Non-streaming mode, different models
+### Test 3: Mock Agent (no API key needed)
 
-**Steps:**
-1. Select the Poet agent node from Test 3
-2. In properties panel:
-   - **Streaming**: **Uncheck** the checkbox
-   - **Model**: Change to `openai/gpt-4o` (more expensive model)
-   - **Temperature**: Drag slider to `0.9` (more creative)
-3. Click **Run** ▶
-4. Observe different behavior
+1. Drag **Agent** from the palette onto the canvas
+2. Select it — properties panel opens on the right
+3. Set **Mode** to **Mock** (default), enter any prompt
+4. Drag **Result** onto the canvas
+5. Connect Agent → Result (drag from the blue dot on the Agent to the green dot on Result)
+6. Click **Run ▶**
 
-**Expected Results:**
-- ✅ No streaming cursor appears
-- ✅ Console shows "waiting..." message
-- ✅ After 2-3 seconds, full response appears at once
-- ✅ Cost is higher: `💰 Cost: $0.002-0.004` (gpt-4o is more expensive)
-- ✅ Response may be more creative (temperature 0.9)
-
-**Troubleshooting:**
-- Higher cost is expected for gpt-4o vs gpt-4o-mini
-- If timeout: Model may be busy, retry
+**Expected:**
+- Node borders: gray → blue (executing) → green (completed)
+- Console shows: `🤖 [Agent name] (mock): [random string]`
+- `✅ Done.` at the end
 
 ---
 
-### Test 5: Document Upload (Text File) 📄
+### Test 4: Live Agent with Streaming
 
-**What it tests:** Document node, file upload, text extraction
-
-**Steps:**
-1. Create a test file on your computer:
-   - Create file named `test.txt`
-   - Content: `"This is a test document. It contains multiple sentences. We will use this to test document processing."`
-2. Clear canvas
-3. Drag **Document** node onto canvas
-4. Select document node
-5. In properties panel:
-   - Click **Choose File** button
-   - Select your `test.txt` file
-   - Wait for upload
-6. Observe the node and properties
-
-**Expected Results:**
-- ✅ Node shows filename: `test.txt`
-- ✅ Node shows size: `~0.1 KB`
-- ✅ Properties show:
-  - File name
-  - File type: TXT
-  - Size in KB
-  - Character count
-  - Content preview (scrollable)
-- ✅ Preview shows: `"This is a test document..."`
-
-**Troubleshooting:**
-- If upload fails: Check file size (should be < 10MB)
-- If no preview: Refresh page and try again
-
----
-
-### Test 6: Document Upload (PDF) 📑
-
-**What it tests:** PDF text extraction with pdf-parse
-
-**Steps:**
-1. Find or create a simple PDF file
-   - Can use: Any PDF with text content (not just images)
-   - Or create one by printing a web page to PDF
-2. Clear canvas (or use new document node)
-3. Drag **Document** node onto canvas
-4. Select it
-5. Upload your PDF file
-6. Wait 2-5 seconds for extraction
-
-**Expected Results:**
-- ✅ Node shows PDF filename
-- ✅ Node shows size
-- ✅ Node shows character count (may be large)
-- ✅ Properties show extracted text in preview
-- ✅ Text is readable (not garbled)
-- ✅ Multi-page PDFs: all pages extracted
-
-**Troubleshooting:**
-- If extraction fails: Try a different PDF (some PDFs have image-only text)
-- If takes long time: Large PDFs (>100 pages) may take 10-30 seconds
-- If garbled text: PDF may have special encoding
-
----
-
-### Test 7: Document → Agent Workflow 🔗
-
-**What it tests:** Document content flowing to agents, context injection
-
-**Steps:**
-1. Use the document node from Test 5 or 6 (with uploaded file)
-2. Drag **Agent** node onto canvas
-3. Connect: Document → Agent (document's top to agent's bottom)
-4. Select agent node, configure:
-   - **Model**: `openai/gpt-4o-mini`
-   - **Mode**: Live
-   - **Prompt**: `"Summarize the above document in one sentence."`
-5. Drag **Result** node
-6. Connect: Agent → Result
-7. Click **Run** ▶
-
-**Expected Results:**
-- ✅ Console shows:
-  - `📄 Document: test.txt (XXX chars)`
-  - `🤖 Agent: [waiting...]`
-  - `🤖 Agent: [summary of your document content]`
-  - `💰 Cost: $0.00XX | Tokens: XX`
-  - `📦 Final: [the summary]`
-- ✅ Summary is relevant to document content
-- ✅ Node borders: Blue (executing) → Green (completed)
-- ✅ Execution completes successfully
-
-**Troubleshooting:**
-- If summary is generic: Document content may not be passing - check connection
-- If "Context too long": Document is very large, cost may be high
-- If agent ignores document: Verify connection exists (arrow visible)
-
----
-
-### Test 8: Document Chunking 📚
-
-**What it tests:** Chunker node, fixed and semantic chunking
-
-**Steps:**
-1. Use existing document node (from Test 7) or upload new file
-2. Drag **Chunker** node onto canvas
-3. Connect: Document → Chunker
-4. Select chunker node, configure:
-   - **Strategy**: Fixed
-   - **Chunk Size**: 100
-   - **Overlap**: 20
-5. Drag **Result** node
-6. Connect: Chunker → Result
-7. Click **Run** ▶
-
-**Expected Results:**
-- ✅ Console shows: `📑 Chunker: Created X chunks`
-- ✅ Result shows chunks separated by `---CHUNK---`
-- ✅ Each chunk is approximately 100 characters
-- ✅ Chunks overlap by ~20 characters
-- ✅ Chunker node shows: `"X chunks"` on canvas
-
-**Steps for Semantic:**
-1. Select chunker node
-2. Change **Strategy** to **Semantic**
-3. **Chunk Size**: 200
-4. Click **Run** ▶
-
-**Expected Results:**
-- ✅ Chunks split at sentence boundaries
-- ✅ No sentences cut in middle
-- ✅ Chunks are closer to 200 chars (but may vary)
-
----
-
-### Test 9: Complex RAG Workflow 🧠
-
-**What it tests:** Multi-node workflow, document chunking + LLM
-
-**Steps:**
-1. Clear canvas
-2. Build workflow:
-   ```
-   Document → Chunker → Agent → Result
-   ```
-3. Configure:
-   - **Document**: Upload a longer text file (500+ words)
-   - **Chunker**:
-     - Strategy: Semantic
-     - Chunk Size: 300
-     - Overlap: 50
-   - **Agent**:
-     - Model: `openai/gpt-4o-mini`
-     - Mode: Live
-     - Streaming: On
-     - Prompt: `"Based on the chunks above, what are the main topics discussed?"`
-4. Click **Run** ▶
-5. Watch full execution flow
-
-**Expected Results:**
-- ✅ Nodes execute in order (left to right)
-- ✅ Each node's border:
-  - Gray → Blue (executing) → Green (completed)
-- ✅ Console shows:
-  1. `📄 Document: [filename]`
-  2. `📑 Chunker: Created X chunks`
-  3. `🤖 Agent: [streaming analysis...]`
-  4. `💰 Cost: $0.00XX`
-  5. `📦 Final: [analysis]`
-- ✅ Agent's response mentions topics from your document
-- ✅ Total time: 3-10 seconds depending on document size
-
----
-
-### Test 10: Multiple Providers 🌐
-
-**What it tests:** Switching between providers, cost comparison
-
-**Steps:**
-1. If you have multiple API keys, configure them in Settings:
-   - OpenAI
-   - Anthropic (optional)
-   - Google AI (optional)
-2. Clear canvas
-3. Create 3 agent nodes side by side
-4. Configure each with same prompt but different models:
-   - **Agent 1**:
-     - Model: `openai/gpt-4o-mini`
-     - Prompt: `"What is the meaning of life?"`
-   - **Agent 2**:
-     - Model: `anthropic/claude-haiku-4`
-     - Prompt: `"What is the meaning of life?"`
-   - **Agent 3**:
-     - Model: `google/gemini-1.5-flash`
-     - Prompt: `"What is the meaning of life?"`
-5. Set all to Live mode
-6. Create 3 Result nodes, connect each agent to its result
-7. Click **Run** ▶
-
-**Expected Results:**
-- ✅ All three agents execute (may be sequential due to topological sort)
-- ✅ Console shows different provider responses
-- ✅ Cost varies by provider:
-  - OpenAI gpt-4o-mini: ~$0.0003
-  - Anthropic claude-haiku-4: ~$0.0005
-  - Google gemini-flash: ~$0.0001 (cheapest)
-- ✅ Responses have different styles/content
-- ✅ All complete successfully
-
-**Troubleshooting:**
-- If one provider fails: Check that specific API key
-- Sequential execution is expected (workflow runs in topological order)
-
----
-
-### Test 11: Streaming Auto-Scroll 📜
-
-**What it tests:** Console auto-scroll behavior
-
-**Steps:**
-1. Create agent with very long output:
-   - Model: `openai/gpt-4o`
-   - Streaming: On
-   - Prompt: `"Write a 500-word essay about the future of AI"`
-2. Click **Run** ▶
-3. As text streams:
-   - Observe console scrolling automatically
-   - Manually scroll UP in console (while still streaming)
-   - Observe auto-scroll stops
-   - Scroll back to BOTTOM
-   - Observe auto-scroll resumes
-
-**Expected Results:**
-- ✅ Console auto-scrolls during streaming
-- ✅ Scrolling up disables auto-scroll
-- ✅ Scrolling to bottom re-enables auto-scroll
-- ✅ Never lose sight of streaming text
-- ✅ Long output (500 words) renders completely
-
----
-
-### Test 12: Error Handling - Invalid API Key ❌
-
-**What it tests:** Error states, error messages
-
-**Steps:**
-1. Open Settings
-2. Change OpenAI API key to invalid value: `sk-invalid123`
-3. Save and close
-4. Create agent node:
+1. Clear the canvas (**Clear** button)
+2. Build: **Prompt → Agent → Result**
+3. Set the Prompt text to: `"Explain recursion in one paragraph."`
+4. Configure Agent:
    - Model: `openai/gpt-4o-mini`
-   - Mode: Live
-   - Prompt: `"Test"`
-5. Connect to Result
-6. Click **Run** ▶
+   - Mode: **Live**
+   - Streaming: **on**
+5. Click **Run ▶**
 
-**Expected Results:**
-- ✅ Node border turns **red** (error state)
-- ✅ Console shows: `❌ [node-id]: Invalid OpenAI API key. Please check your API key and try again.`
-- ✅ Execution stops (doesn't continue to result)
-- ✅ Error message is clear and actionable
-
-**Troubleshooting:**
-- Remember to fix your API key in Settings afterward!
+**Expected:**
+- Console streams tokens in real time with a `▌` cursor
+- Node completes with green border
+- Cost shown: `💰 Cost: $0.000X | Tokens: XX`
 
 ---
 
-### Test 13: Error Handling - Network Error 🔌
+### Test 5: Non-Streaming Execution
 
-**What it tests:** Network error handling
+Same workflow as Test 4, but uncheck **Streaming** on the agent.
 
-**Steps:**
-1. Disconnect from internet (WiFi off) OR use invalid model
-2. Create agent node:
-   - Model: `openai/gpt-4o-mini`
-   - Mode: Live
-3. Click **Run** ▶
-
-**Expected Results:**
-- ✅ Red error border on node
-- ✅ Console shows network error message
-- ✅ Execution stops gracefully
-
-**Troubleshooting:**
-- Reconnect to internet when done
-- If using invalid model, change back to valid one
+**Expected:** Console shows a waiting indicator, then the full response appears at once. No streaming cursor.
 
 ---
 
-### Test 14: Visual States - Execution Progress 🎨
+### Test 6: Pause & Resume
 
-**What it tests:** Node execution state visualization
+1. Build a 4-agent sequential chain: **Agent 1 → Agent 2 → Agent 3 → Agent 4 → Result**
+2. All agents: live mode, prompt `"Count from 1 to 5"`
+3. Click **Run ▶**
+4. After Agent 1 turns green, click **Pause ⏸️**
+5. Wait a few seconds, then click **Resume ▶️**
 
-**Steps:**
-1. Create workflow: `Prompt → Agent (Live, Streaming) → Result`
-2. Configure agent with longer response:
-   - Prompt: `"Count from 1 to 20 with explanations"`
-3. Click **Run** ▶
-4. Watch the nodes carefully
-
-**Expected Results:**
-- ✅ Before execution: All nodes have gray borders
-- ✅ During execution:
-  - Currently executing node: **Blue animated pulsing border**
-  - Completed nodes: **Green solid border**
-  - Waiting nodes: Gray border
-- ✅ After execution: All nodes green
-- ✅ Pulse animation is smooth and visible
+**Expected:**
+- Pause waits for the current node to finish before halting
+- Console: `⏸️ Execution paused` then `▶️ Execution resumed`
+- Correct buttons appear at each state: Pause+Cancel while running, Resume+Cancel while paused
 
 ---
 
-### Test 15: Multiple Documents → One Agent 📚➡️🤖
+### Test 7: Cancel
 
-**What it tests:** Multiple inputs to one node, context concatenation
+1. Same chain as Test 6
+2. Click **Run ▶**, then **Cancel** during execution
 
-**Steps:**
-1. Clear canvas
-2. Create two document nodes side by side
-3. Upload different files to each:
-   - Document 1: `file1.txt` with content: `"The sky is blue."`
-   - Document 2: `file2.txt` with content: `"The grass is green."`
-4. Create one Agent node
-5. Connect **both** documents to the agent:
-   - Document 1 → Agent
-   - Document 2 → Agent
-6. Configure agent:
-   - Model: `openai/gpt-4o-mini`
-   - Mode: Live
-   - Prompt: `"List all the colors mentioned in the documents."`
-7. Connect Agent → Result
-8. Click **Run** ▶
-
-**Expected Results:**
-- ✅ Both documents execute first
-- ✅ Agent receives both documents' content
-- ✅ Agent response mentions: "blue" and "green"
-- ✅ Documents are separated with `---` in context
-- ✅ Execution succeeds
+**Expected:**
+- Console: `🛑 Execution cancelled`
+- All node borders reset to gray
+- Run button reappears
 
 ---
 
-### Test 16: Temperature Settings 🌡️
+## Section 3 — Error Recovery
 
-**What it tests:** Temperature parameter effects
+### Test 8: Retry After Error
 
-**Steps:**
-1. Create agent:
-   - Model: `openai/gpt-4o-mini`
-   - Mode: Live
-   - Prompt: `"Write a creative opening line for a story."`
-2. Run 3 times with different temperatures:
-   - **Temperature 0.0**: Click Run, note output
-   - **Temperature 1.0**: Click Run, note output
-   - **Temperature 2.0**: Click Run, note output
+1. Open Settings, set an intentionally invalid OpenAI key
+2. Build: **Agent (live, gpt-4o-mini) → Result**
+3. Click **Run ▶**
+4. Error dialog appears — do **not** click anything yet
+5. Go to Settings, fix the API key
+6. Back in the error dialog, click **Retry**
 
-**Expected Results:**
-- ✅ Temperature 0.0: Most deterministic, factual, similar on each run
-- ✅ Temperature 1.0: Balanced creativity
-- ✅ Temperature 2.0: Most creative, varied, potentially less coherent
-- ✅ Outputs differ noticeably
+**Expected:**
+- Error dialog shows node name, error message, and three buttons: Retry / Skip / Abort
+- After retry with a valid key: node re-executes and completes successfully
 
 ---
 
-### Test 17: Max Tokens Limit ✂️
+### Test 9: Skip a Failing Node
 
-**What it tests:** Max tokens parameter
+Same setup as Test 8, but click **Skip** instead.
 
-**Steps:**
-1. Create agent:
-   - Model: `openai/gpt-4o-mini`
-   - Mode: Live
-   - Streaming: On
-   - Prompt: `"Write a 1000-word essay about space exploration."`
-   - **Max Tokens**: `50` (very low)
-2. Click **Run** ▶
-
-**Expected Results:**
-- ✅ Response cuts off mid-sentence after ~50 tokens (~35-40 words)
-- ✅ Cost is lower than if no max tokens
-- ✅ Token count shown: ~50-60 tokens (includes input)
-- ✅ Streaming stops when limit reached
-
-**Test with higher limit:**
-1. Change **Max Tokens** to `500`
-2. Run again
-
-**Expected Results:**
-- ✅ Much longer response (300-400 words)
-- ✅ Higher cost
-- ✅ Token count: ~500-600
+**Expected:**
+- Console: `⏭️ Skipping node: [name]`
+- That node stays red; execution continues to the next node
+- Downstream nodes receive no input from the skipped node
 
 ---
 
-### Test 18: Execution Controls - Pause and Resume ⏸️▶️
+### Test 10: Abort
 
-**What it tests:** Pause/resume functionality during workflow execution
+Same setup, click **Abort** in the error dialog.
 
-**Steps:**
-1. Clear canvas
-2. Create a workflow with 4 agent nodes in sequence:
-   ```
-   Agent 1 → Agent 2 → Agent 3 → Agent 4 → Result
-   ```
-3. Configure all agents:
-   - Model: `openai/gpt-4o-mini`
-   - Mode: Live
-   - Streaming: On
-   - Prompts: `"Count to 10 slowly"` (or similar delay-inducing prompts)
-4. Click **Run** ▶
-5. Watch first agent execute (blue pulsing border)
-6. As soon as first agent completes (turns green), click **Pause** ⏸️ button
-7. Observe execution state
-8. Wait 3-5 seconds
-9. Click **Resume** ▶️ button
-10. Watch execution continue
-
-**Expected Results:**
-- ✅ Run button appears when workflow is idle
-- ✅ After clicking Run:
-  - Run button disappears
-  - **Pause** and **Cancel** buttons appear
-- ✅ After clicking Pause:
-  - Current node completes execution (doesn't cut off mid-node)
-  - Console shows: `⏸️ Execution paused`
-  - Pause button disappears
-  - **Resume** and **Cancel** buttons appear
-  - Node borders remain in their current state (green for completed, gray for not started)
-- ✅ After clicking Resume:
-  - Console shows: `▶️ Execution resumed`
-  - Resume button disappears
-  - **Pause** and **Cancel** buttons reappear
-  - Next node begins executing (blue pulsing border)
-  - Execution continues through remaining nodes
-- ✅ All nodes eventually complete (all green borders)
-
-**Troubleshooting:**
-- If pause happens mid-node: This is expected - pause waits for current node to finish
-- If execution doesn't resume: Check console for errors, try clicking Resume again
+**Expected:** Equivalent to Cancel — all nodes reset to gray, execution stops.
 
 ---
 
-### Test 19: Execution Controls - Cancel ❌
+## Section 4 — Documents & Chunking
 
-**What it tests:** Cancel/abort functionality during workflow execution
+### Test 11: Text File Upload
 
-**Steps:**
-1. Use the same 4-agent workflow from Test 18
-2. Click **Run** ▶
-3. Watch first agent start executing (blue border)
-4. Click **Cancel** 🛑 button (appears next to Pause during execution)
-5. Observe what happens
+1. Drag **Document** onto the canvas
+2. Select it, click **Choose File**, upload any `.txt` file
+3. Check the properties panel
 
-**Expected Results:**
-- ✅ Console shows: `🛑 Execution cancelled`
-- ✅ Execution stops immediately (doesn't continue to next node)
-- ✅ All node borders reset to gray (idle state)
-- ✅ Cancel and Pause buttons disappear
-- ✅ Run button reappears
-- ✅ Can click Run again to start fresh execution
-
-**Test Cancel While Paused:**
-1. Click **Run** ▶
-2. After first node completes, click **Pause** ⏸️
-3. While paused, click **Cancel** 🛑
-
-**Expected Results:**
-- ✅ Execution cancelled from paused state
-- ✅ All nodes reset to gray
-- ✅ Console shows cancellation message
-- ✅ Run button reappears
-
-**Troubleshooting:**
-- Cancellation is irreversible - you'll need to run from start again
-- If nodes don't reset: Refresh page and try again
+**Expected:** Filename, size, character count, and content preview all populate.
 
 ---
 
-### Test 20: Error Recovery - Retry ♻️
+### Test 12: PDF Upload
 
-**What it tests:** Error dialog and retry functionality
+Upload a PDF with text content to a Document node.
 
-**Steps:**
-1. Open Settings
-2. Set OpenAI API key to invalid: `sk-invalid-test-key-12345`
-3. Click Save and close
-4. Clear canvas
-5. Create simple workflow:
-   ```
-   Agent 1 → Agent 2 → Result
-   ```
-6. Configure Agent 1:
-   - Model: `openai/gpt-4o-mini`
-   - Mode: Live
-   - Prompt: `"Say hello"`
-7. Configure Agent 2:
-   - Model: `openai/gpt-4o-mini`
-   - Mode: Live
-   - Prompt: `"Say goodbye"`
-8. Click **Run** ▶
-9. Wait for error dialog to appear
-10. Observe the error dialog content
-11. Keep dialog open, go to Settings
-12. Fix API key (enter valid key)
-13. Save and close Settings
-14. In error dialog, click **Retry** button
-
-**Expected Results:**
-- ✅ Error dialog appears showing:
-  - ❌ Icon and "Execution Error" title
-  - Node name: "Agent 1"
-  - Error message: "Invalid OpenAI API key..."
-  - Three buttons: **Retry**, **Skip**, **Abort**
-- ✅ Node 1 has red border (error state)
-- ✅ Console shows error message
-- ✅ After fixing API key and clicking Retry:
-  - Dialog closes
-  - Node 1 resets to idle (gray border)
-  - Node 1 re-executes with valid API key
-  - Node 1 completes successfully (green border)
-  - Agent 2 executes
-  - Workflow completes successfully
-- ✅ Console shows: `♻️ Retrying node: Agent 1`
-
-**Troubleshooting:**
-- Make sure to actually fix the API key before retrying
-- If retry fails again: API key still invalid, check Settings
+**Expected:** Multi-page PDFs extract all text; preview shows the extracted content.
 
 ---
 
-### Test 21: Error Recovery - Skip ⏭️
+### Test 13: Document → Agent Pipeline
 
-**What it tests:** Skip functionality to continue past errors
+Build: **Document → Agent → Result**
 
-**Steps:**
-1. Use the same workflow from Test 20
-2. Ensure Agent 1 has invalid API key (will fail)
-3. Ensure Agent 2 has valid API key (should succeed if reached)
-4. Click **Run** ▶
-5. When error dialog appears for Agent 1, click **Skip** button
+Agent prompt: `"Summarize the document in one sentence."`
 
-**Expected Results:**
-- ✅ Error dialog closes
-- ✅ Console shows: `⏭️ Skipping node: Agent 1`
-- ✅ Node 1 remains with red error border (not reset)
-- ✅ Execution continues to Agent 2
-- ✅ Agent 2 executes successfully (blue → green)
-- ✅ Workflow completes with Agent 1 in error state, Agent 2 completed
-- ✅ Result node receives output from Agent 2 only
-
-**Use Case:**
-Skip is useful when:
-- One node in a workflow is non-critical
-- You want to see results from other nodes despite one failure
-- Testing workflows with partially broken components
+**Expected:** Agent response is relevant to your document's content.
 
 ---
 
-### Test 22: Error Recovery - Abort 🛑
+### Test 14: Chunker — Fixed Strategy
 
-**What it tests:** Abort functionality from error dialog
+Build: **Document → Chunker → Result**
 
-**Steps:**
-1. Use the same workflow from Test 20
-2. Ensure Agent 1 has invalid API key
-3. Click **Run** ▶
-4. When error dialog appears, click **Abort** button
+Configure Chunker:
+- Strategy: **Fixed**
+- Chunk size: 150
+- Overlap: 30
 
-**Expected Results:**
-- ✅ Error dialog closes
-- ✅ Console shows: `🛑 Execution cancelled`
-- ✅ All nodes reset to gray (idle state)
-- ✅ Execution stops completely
-- ✅ Run button reappears
-- ✅ No further nodes execute
-
-**Comparison:**
-- **Abort** from error dialog = same as clicking **Cancel** button
-- Both reset all nodes and stop execution
-- Abort is just more convenient when error dialog is already open
+**Expected:** Result shows chunks separated by `---CHUNK---`; each chunk ≈150 chars with ~30 char overlap. Chunker node on canvas shows chunk count.
 
 ---
 
-### Test 23: Error Recovery - Multiple Errors 🔄
+### Test 15: Chunker — Semantic Strategy
 
-**What it tests:** Error handling with multiple failing nodes
+Same, but switch Chunker to **Semantic** strategy, size 300.
 
-**Steps:**
-1. Configure Settings with invalid API key
-2. Create workflow with 3 agents:
-   ```
-   Agent 1 → Agent 2 → Agent 3 → Result
-   ```
-3. All agents use the invalid API key
-4. Click **Run** ▶
-5. When error dialog appears for Agent 1, click **Skip**
-6. When error dialog appears for Agent 2, click **Skip**
-7. When error dialog appears for Agent 3, click **Retry**
-8. Before clicking Retry, fix API key in Settings
-9. Click **Retry** in the error dialog
-
-**Expected Results:**
-- ✅ Error dialog appears three times (once per failing node)
-- ✅ After first skip: Agent 1 stays red, Agent 2 executes
-- ✅ After second skip: Agent 2 stays red, Agent 3 executes
-- ✅ After fixing key and retry: Agent 3 succeeds
-- ✅ Final state:
-  - Agent 1: Red (skipped)
-  - Agent 2: Red (skipped)
-  - Agent 3: Green (completed after retry)
-- ✅ Console shows all recovery actions
-
-**Learning:**
-- You can mix retry/skip strategies in one workflow
-- Skipped nodes remain in error state for debugging
-- Retried nodes reset and re-execute fresh
+**Expected:** Chunks split at sentence boundaries, no sentence cut in the middle.
 
 ---
 
-## Performance Benchmarks
+### Test 16: Multiple Documents → One Agent
 
-Document your results:
+1. Create two Document nodes, upload different files to each
+2. Connect both to a single Agent node
+3. Prompt: `"What topics are covered across both documents?"`
 
-| Test | Expected Time | Expected Cost | Pass/Fail |
-|------|---------------|---------------|-----------|
-| Test 3 (Streaming) | 2-5s | ~$0.0003 | ⬜ |
-| Test 4 (Non-streaming) | 2-3s | ~$0.002 | ⬜ |
-| Test 5 (Text upload) | <1s | Free | ⬜ |
-| Test 6 (PDF upload) | 2-5s | Free | ⬜ |
-| Test 7 (Doc→Agent) | 3-6s | ~$0.001 | ⬜ |
-| Test 8 (Chunking) | <1s | Free | ⬜ |
-| Test 9 (RAG workflow) | 5-10s | ~$0.003 | ⬜ |
+**Expected:** Agent receives content from both documents; response references both files.
 
 ---
 
-## Known Issues & Limitations
+## Section 5 — Tools
 
-### Expected Behavior (Not Bugs):
-- **Execution is sequential**: Nodes run one at a time (not parallel)
-- **Cost accumulates**: Each run costs money (use mock mode for free testing)
-- **Long documents**: May exceed context window (100k+ characters)
-- **Streaming updates all logs**: Previous logs visible while new ones stream
-- **Pause waits for node completion**: Pause stops after current node finishes (not mid-node)
-- **Error recovery interrupts flow**: Error dialogs appear immediately and pause execution until user responds
+### Test 17: Web Search
 
-### Browser Compatibility:
-- **Tested**: Chrome, Firefox, Safari (latest)
-- **localStorage required**: Incognito mode may not persist API keys
+Build: **Prompt → Tool (Web Search) → Agent → Result**
 
----
+- Prompt: `"latest advances in quantum computing"`
+- Tool: kind = **Web Search**, max results = 5
+- Agent prompt: `"Summarize the search results"`
 
-## Troubleshooting Guide
+**Expected:** Tool output shows formatted search results (title, URL, snippet). Agent summarizes them.
 
-### Issue: "Settings won't save"
-- **Cause**: localStorage disabled or incognito mode
-- **Fix**: Use regular browser window, check browser settings
-
-### Issue: "Streaming doesn't show"
-- **Cause**: Streaming checkbox unchecked
-- **Fix**: Select node → Properties → Check "Streaming"
-
-### Issue: "Nodes won't connect"
-- **Cause**: Dragging from wrong handle
-- **Fix**: Drag from **top** (source) to **bottom** (target) of nodes
-
-### Issue: "Expensive costs"
-- **Cause**: Using gpt-4o or claude-sonnet-4 with long prompts
-- **Fix**: Switch to gpt-4o-mini or use mock mode
-
-### Issue: "No response from agent"
-- **Cause**: API key invalid, network error, or rate limit
-- **Fix**: Check Settings → Test key, wait if rate limited
-
-### Issue: "Document preview is empty"
-- **Cause**: PDF may have image-only text or special encoding
-- **Fix**: Try different PDF or use text file
+> **Note:** Requires a Brave Search API key configured on the server. If not set up, the tool will error with a clear message.
 
 ---
 
-## Testing Checklist
+### Test 18: HTTP Request
 
-Use this checklist to track your testing progress:
+Build: **Tool (HTTP) → Result**
 
-### Core Functionality
-- [ ] Test 1: Settings & API Key Configuration
-- [ ] Test 2: Basic Agent (Mock Mode)
-- [ ] Test 3: Live Agent with Streaming
-- [ ] Test 4: Non-Streaming Execution
-- [ ] Test 5: Document Upload (Text)
-- [ ] Test 6: Document Upload (PDF)
-- [ ] Test 7: Document → Agent Workflow
-- [ ] Test 8: Document Chunking
+Configure:
+- Method: **GET**
+- URL: `https://jsonplaceholder.typicode.com/users`
 
-### Advanced Features
-- [ ] Test 9: Complex RAG Workflow
-- [ ] Test 10: Multiple Providers
-- [ ] Test 11: Streaming Auto-Scroll
-- [ ] Test 12: Error - Invalid API Key
-- [ ] Test 13: Error - Network Error
-- [ ] Test 14: Visual Execution States
-- [ ] Test 15: Multiple Documents → Agent
-- [ ] Test 16: Temperature Settings
-- [ ] Test 17: Max Tokens Limit
+**Expected:** Result shows a JSON array of user objects.
 
-### Execution Controls & Error Recovery
-- [ ] Test 18: Execution Controls - Pause and Resume
-- [ ] Test 19: Execution Controls - Cancel
-- [ ] Test 20: Error Recovery - Retry
-- [ ] Test 21: Error Recovery - Skip
-- [ ] Test 22: Error Recovery - Abort
-- [ ] Test 23: Error Recovery - Multiple Errors
+---
+
+### Test 19: Code Execution
+
+Build: **Prompt → Agent → Tool (Code Exec) → Result**
+
+- Prompt: `"Write a Node.js program to print the first 10 Fibonacci numbers"`
+- Agent: returns raw JavaScript code
+- Tool: Code Exec, timeout 10s
+
+**Expected:** Tool executes the generated code; Result shows the printed Fibonacci sequence.
+
+---
+
+### Test 20: Database Query (Mock)
+
+Build: **Tool (Database) → Result**
+
+Configure:
+- Connection string: any string (mock, not real)
+- Query: `"SELECT * FROM users LIMIT 5"`
+
+**Expected:** Result shows a markdown table with mock user data.
+
+---
+
+## Section 6 — Advanced Orchestration
+
+### Test 21: Router — Keyword Strategy
+
+Build: **Prompt → Router → Agent A → Result A**
+                              **→ Agent B → Result B**
+
+Configure Router:
+- Strategy: **Keyword**
+- Route 1: label "Weather", keywords: `weather, sunny, rain`, match mode: any
+- Route 2: label "Travel", keywords: `travel, hotel, flight`, match mode: any
+
+Set Prompt to: `"The weather today is sunny and perfect for a walk."`
+
+**Expected:** Only Agent A ("Weather" route) executes. Console shows the route taken.
+
+Change Prompt to: `"I need to book a hotel for my trip."` and re-run.
+
+**Expected:** Only Agent B ("Travel" route) executes.
+
+---
+
+### Test 22: Router — LLM Judge Strategy
+
+Same topology, but set Strategy to **LLM Judge**.
+
+- Route 1 judge prompt: `"Is this message about weather or nature?"`
+- Route 2 judge prompt: `"Is this message about travel or transportation?"`
+
+**Expected:** LLM evaluates both route conditions and routes to the appropriate agent.
+
+---
+
+### Test 23: Router — Sentiment Strategy
+
+Build: **Prompt → Router → Agent A (Positive) → Result A**
+                             **→ Agent B (Negative) → Result B**
+
+- Route 1: target **Positive**, threshold 0.5
+- Route 2: target **Negative**, threshold 0.5
+
+Prompt 1: `"This is absolutely wonderful! I love it!"`  
+Prompt 2: `"This is terrible. I hate every part of it."`
+
+**Expected:** Each prompt routes to the matching sentiment branch.
+
+---
+
+### Test 24: Router — JSON Field Strategy
+
+Build: **Prompt → Agent (returns JSON) → Router → Result A / Result B**
+
+Agent prompt:
+```
+Return a JSON object: { "priority": "high" } or { "priority": "low" }.
+Return only raw JSON, no markdown.
+```
+
+Configure Router:
+- Strategy: **JSON Field**
+- Route 1: field `priority`, operator `equals`, value `high`
+- Route 2: field `priority`, operator `equals`, value `low`
+
+**Expected:** Routes to the correct branch based on the JSON value.
+
+---
+
+### Test 25: Loop Node
+
+Build: **Prompt → Loop → Agent → (back to Loop)**
+Loop exits to → **Result**
+
+Configure Loop:
+- Max iterations: 3
+- Break condition: **Keyword Match**, keyword: `DONE`
+
+Agent prompt:
+```
+Iteration {{iteration}}: If this is the 2nd iteration, end your response with the word DONE.
+Otherwise write one sentence.
+```
+
+**Expected:** Loop runs up to 3 times; breaks early on iteration 2 when "DONE" is found. Console shows each iteration.
+
+---
+
+### Test 26: Loop — LLM Judge Break
+
+Configure Loop with break condition **LLM Judge**, prompt:
+`"Does this response contain a complete conclusion? Answer only YES or NO."`
+
+**Expected:** Loop continues until the LLM decides the output is complete.
+
+---
+
+### Test 27: Memory Node — Workflow Scope
+
+Build: **Prompt → Memory (write, key: "topic") → Agent → Memory (read, key: "topic") → Result**
+
+- First Memory node: scope **Workflow**, write "topic" from input
+- Second Memory node: read "topic", inject into downstream context
+- Agent prompt: `"Generate a haiku about {{memory:topic}}"`
+
+**Expected:**
+- Memory Inspector (right panel, "Memory" tab) shows the stored key
+- Agent output references the stored topic
+- Memory resets on next run
+
+---
+
+### Test 28: Memory — Global vs Workflow Scope
+
+1. Run a workflow that writes a key with **Global** scope
+2. Run a different workflow
+3. Check the Memory Inspector — the global key should still be present
+
+**Expected:** Global keys persist across runs; Workflow keys clear on each new run.
+
+---
+
+### Test 29: Human Review — Approve/Reject
+
+Build: **Agent → Human Review → Result**
+
+Configure Human Review:
+- Mode: **Approve / Reject**
+- Instructions: `"Check that the response is appropriate"`
+
+Run the workflow. When the review panel appears:
+- Click **Approve** on the first test; verify output flows to Result
+- Click **Reject** on a second run; verify execution stops
+
+**Expected:** Node stays blue (paused) until a decision is made.
+
+---
+
+### Test 30: Human Review — Edit & Approve
+
+Configure mode: **Edit & Approve**
+
+When review panel appears, modify the agent's output, then click **Approve**.
+
+**Expected:** Downstream nodes receive the edited content, not the original.
+
+---
+
+### Test 31: Human Review — Multi-Reviewer
+
+Configure:
+- Enable multi-review: **on**
+- Reviewers: 3
+- Approval rule: **M-of-N**, M = 2
+
+When review panel appears, approve with 2 of the 3 reviewers.
+
+**Expected:** Execution proceeds after 2 approvals without waiting for the third.
+
+---
+
+## Section 7 — Compare Mode
+
+### Test 32: Basic Compare Run
+
+1. Click **Compare** in the toolbar (turns active)
+2. A second row of controls appears — configure two providers:
+   - Provider 1: `openai/gpt-4o-mini`
+   - Provider 2: `anthropic/claude-haiku-4-5` (or any second model)
+3. Build a simple **Prompt → Agent → Result** workflow
+4. Click **Run ▶**
+
+**Expected:**
+- Two console columns appear side by side
+- Both run in parallel, each showing their logs independently
+- Both complete with their respective model outputs
+
+---
+
+### Test 33: Word Diff
+
+With exactly 2 providers and both runs complete:
+
+1. Click the **Diff** dropdown in the compare console header
+2. Select **Word diff**
+
+**Expected:** The two outputs are shown with color-highlighted word-level differences. Divergence % shown in a summary bar.
+
+---
+
+### Test 34: Sentence Diff
+
+Switch Diff mode to **Sentence diff**.
+
+**Expected:** Differences highlighted at sentence level, not word level.
+
+---
+
+### Test 35: Flip Baseline
+
+With diff active, click the **Flip** button.
+
+**Expected:** The "Base" and "Compare" labels swap; diff colors invert accordingly.
+
+---
+
+### Test 36: Compare with 3–4 Providers
+
+Add a third provider using the **+** button in compare controls.
+
+**Expected:** Three console columns render. Diff controls are hidden (diff only works with exactly 2 providers).
+
+---
+
+## Section 8 — Run Statistics
+
+### Test 37: Stats Panel
+
+After any completed run (compare or single), the **Stats** button in the toolbar becomes active.
+
+1. Click **Stats**
+
+**Expected:** A collapsible panel opens above the console showing per-node timing, token counts, and cost. Close with **X**.
+
+---
+
+### Test 38: Annotation Bar
+
+After a completed run, each console column shows an annotation bar below the output.
+
+1. Click 👍 or 👎
+2. Select a star rating (1–5)
+3. Type a note in the text field
+
+**Expected:** Annotations persist in localStorage (visible if you re-open the same run in history).
+
+---
+
+### Test 39: Export Annotations
+
+In the annotation bar, click **Export CSV** (if visible) or the export button.
+
+**Expected:** A CSV file downloads with columns: run ID, provider, thumbs, rating, notes, timestamp.
+
+---
+
+## Section 9 — Run History
+
+### Test 40: History Page — Basic View
+
+1. Complete a few runs (mix of successful and errored ones)
+2. Navigate to `/history` (or click History in nav)
+
+**Expected:**
+- StatsBar shows total/completed/error/cancelled run counts, average duration, total cost
+- Run table lists all runs with name, time, duration, status badge, cost, node count
+
+---
+
+### Test 41: History Filters
+
+1. Type a partial name in the search box
+2. Select a status from the dropdown (completed / error / cancelled)
+
+**Expected:** Table filters live as you type; clears when field is emptied.
+
+---
+
+### Test 42: Run Detail Drawer
+
+Click **View** on any row in the run table.
+
+**Expected:** A drawer opens on the right showing run metadata, workflow JSON, and per-node outputs.
+
+---
+
+### Test 43: Export a Run
+
+Click **Export** on a row.
+
+**Expected:** A JSON file downloads with the run data, outputs, and workflow snapshot.
+
+---
+
+### Test 44: Delete a Run
+
+Click **Delete** on a row, confirm the dialog.
+
+**Expected:** Row disappears from the table; stats update.
+
+---
+
+### Test 45: Import a Run
+
+1. Export a run (Test 43)
+2. Delete that run
+3. Click **Import** at the top of the history page
+4. Upload the exported JSON file
+
+**Expected:** Run reappears in the table with the same data.
+
+---
+
+### Test 46: Trend Charts
+
+With 5+ runs in history, scroll down to the charts section.
+
+**Expected:**
+- Cost trend line chart shows cost over time
+- Status distribution chart shows completed/error/cancelled split
+- Model usage bar chart shows which models were used most
+
+---
+
+## Section 10 — Templates
+
+### Test 47: Load a Built-in Template
+
+1. Navigate to `/templates`
+2. Find any template (e.g., "Document Summarizer") and click **Load**
+3. If the canvas has nodes, a confirmation dialog appears — confirm
+
+**Expected:** Canvas populates with the template's workflow; workflow name updates.
+
+---
+
+### Test 48: All 11 Built-in Templates Load
+
+One by one (or a sample), click **Load** on each of the 11 built-in templates:
+- Document Summarizer
+- RAG Pipeline
+- Multi-Agent Analysis
+- Keyword Router
+- LLM Judge Router
+- Refine Loop
+- Web Search Pipeline
+- Code Gen + Execute
+- API Fetch + Analyze
+- DB Query + Report
+- Research & Code Pipeline
+
+**Expected:** Each loads a valid workflow with nodes and edges correctly connected. Node count badge on each card matches the actual node count when loaded.
+
+---
+
+### Test 49: Save as Template (from Toolbar)
+
+1. Build any workflow on the main canvas
+2. Click **Save as Template** in the toolbar
+3. Enter a name and optional description, click **Save Template**
+4. Navigate to `/templates`
+
+**Expected:** Your saved template appears under "My Templates" with the correct name, description, node count, and node type badges.
+
+---
+
+### Test 50: Save as Template (from Templates Page)
+
+1. Build a workflow on the main canvas
+2. Navigate to `/templates` directly
+3. Click **+ Save Current Workflow** (top-right, disabled if canvas empty)
+
+**Expected:** Same save modal appears; template saved and appears in the list.
+
+---
+
+### Test 51: Delete a User Template
+
+On the templates page, click **Delete** on a user template.
+
+**Expected:** Template is removed from "My Templates".
+
+---
+
+### Test 52: Template Load Confirmation
+
+1. Build a workflow on the canvas (several nodes)
+2. Navigate to `/templates`, click **Load** on any template
+
+**Expected:** A "Replace current workflow?" confirmation dialog appears. Cancel keeps the existing workflow; Load replaces it.
+
+---
+
+### Test 53: Load Template Generates Fresh IDs
+
+1. Load the same template twice (navigate back and load again)
+
+**Expected:** Both loads work without conflicts — node IDs are regenerated each time, so loading twice doesn't cause collisions.
+
+---
+
+## Section 11 — Import / Export Workflows
+
+### Test 54: Export Workflow JSON
+
+1. Build any workflow
+2. Click **Export JSON** in the toolbar
+
+**Expected:** A JSON file downloads containing `{ nodes: [...], edges: [...] }`.
+
+---
+
+### Test 55: Import Workflow JSON
+
+1. Clear the canvas
+2. Click **Import JSON** and upload the previously exported file
+
+**Expected:** Canvas restores the workflow exactly as exported.
+
+---
+
+## Section 12 — Audit Trail
+
+### Test 56: Audit Trail Entries
+
+Run a workflow that includes a Router, Memory write, or Human Review node.
+
+After the run, look for the **Audit Trail** panel (bottom area or properties tab).
+
+**Expected:**
+- Router decisions logged: shows which route was taken
+- Memory writes logged: shows key, old value, new value
+- Human Review decisions logged: shows APPROVED/REJECTED/EDITED
+
+---
+
+### Test 57: Audit Trail Search & Export
+
+1. In the audit trail, type a node name in the search box
+2. Click **Export** (downloads JSON)
+
+**Expected:** Entries filter by search term; export contains all events.
+
+---
+
+## Section 13 — Edge Cases
+
+### Test 58: Empty Canvas Run
+
+Click **Run ▶** with no nodes on the canvas.
+
+**Expected:** Either nothing happens, or a clear message is shown. No crash.
+
+---
+
+### Test 59: Disconnected Nodes
+
+Place two Agent nodes on the canvas with no edges. Click **Run**.
+
+**Expected:** Execution handles disconnected nodes gracefully (each runs independently, or a clear error is shown).
+
+---
+
+### Test 60: Cycle Detection
+
+Connect Node A → Node B → Node A (forming a cycle).
+
+**Expected:** A cycle detection error is shown; execution does not start.
+
+---
+
+### Test 61: Very Long Streaming Output
+
+Set an agent prompt to: `"Write a 1000-word essay about the history of computing."` with streaming on.
+
+1. Scroll up in the console mid-stream
+2. Scroll back to the bottom
+
+**Expected:** Auto-scroll disables when you scroll up; re-enables when you reach the bottom.
+
+---
+
+### Test 62: Max Tokens Truncation
+
+Set agent Max Tokens to **50**, prompt: `"Write a 500-word essay."` 
+
+**Expected:** Response cuts off mid-sentence near the token limit. Token count ≈50 shown in cost line.
+
+---
+
+### Test 63: Multiple Sequential Runs
+
+Run the same workflow three times in a row without clearing.
+
+**Expected:** Each run completes cleanly, nodes reset to idle before re-executing, console shows all three runs' output.
+
+---
+
+### Test 64: Save as Template Disabled State
+
+Navigate to `/templates` with an empty canvas.
+
+**Expected:** "+ Save Current Workflow" button is disabled/grayed out.
+
+---
+
+## Checklist
+
+### Core Setup
+- [ ] Test 1: Settings & API Keys
+- [ ] Test 2: Workflow Name
+
+### Basic Execution
+- [ ] Test 3: Mock Agent
+- [ ] Test 4: Live Agent with Streaming
+- [ ] Test 5: Non-Streaming
+- [ ] Test 6: Pause & Resume
+- [ ] Test 7: Cancel
+
+### Error Recovery
+- [ ] Test 8: Retry
+- [ ] Test 9: Skip
+- [ ] Test 10: Abort
+
+### Documents & Chunking
+- [ ] Test 11: Text Upload
+- [ ] Test 12: PDF Upload
+- [ ] Test 13: Document → Agent
+- [ ] Test 14: Chunker Fixed
+- [ ] Test 15: Chunker Semantic
+- [ ] Test 16: Multiple Documents → Agent
+
+### Tools
+- [ ] Test 17: Web Search
+- [ ] Test 18: HTTP Request
+- [ ] Test 19: Code Execution
+- [ ] Test 20: Database Query
+
+### Advanced Orchestration
+- [ ] Test 21: Router — Keyword
+- [ ] Test 22: Router — LLM Judge
+- [ ] Test 23: Router — Sentiment
+- [ ] Test 24: Router — JSON Field
+- [ ] Test 25: Loop — Keyword Break
+- [ ] Test 26: Loop — LLM Judge Break
+- [ ] Test 27: Memory — Workflow Scope
+- [ ] Test 28: Memory — Global Scope
+- [ ] Test 29: Human Review — Approve/Reject
+- [ ] Test 30: Human Review — Edit & Approve
+- [ ] Test 31: Human Review — Multi-Reviewer
+
+### Compare Mode
+- [ ] Test 32: Basic Compare Run
+- [ ] Test 33: Word Diff
+- [ ] Test 34: Sentence Diff
+- [ ] Test 35: Flip Baseline
+- [ ] Test 36: 3–4 Providers
+
+### Run Statistics
+- [ ] Test 37: Stats Panel
+- [ ] Test 38: Annotation Bar
+- [ ] Test 39: Export Annotations
+
+### Run History
+- [ ] Test 40: History Page
+- [ ] Test 41: Filters
+- [ ] Test 42: Detail Drawer
+- [ ] Test 43: Export Run
+- [ ] Test 44: Delete Run
+- [ ] Test 45: Import Run
+- [ ] Test 46: Trend Charts
+
+### Templates
+- [ ] Test 47: Load Built-in Template
+- [ ] Test 48: All 11 Templates Load
+- [ ] Test 49: Save as Template (toolbar)
+- [ ] Test 50: Save as Template (templates page)
+- [ ] Test 51: Delete User Template
+- [ ] Test 52: Load with Confirmation
+- [ ] Test 53: Fresh IDs on Reload
+
+### Import / Export
+- [ ] Test 54: Export Workflow JSON
+- [ ] Test 55: Import Workflow JSON
+
+### Audit Trail
+- [ ] Test 56: Audit Entries
+- [ ] Test 57: Audit Search & Export
 
 ### Edge Cases
-- [ ] Large file upload (>5MB)
-- [ ] Very long prompt (>1000 words)
-- [ ] Multiple sequential runs
-- [ ] Disconnecting/reconnecting nodes
-- [ ] Deleting nodes mid-workflow
-- [ ] Clearing canvas during execution
-- [ ] Pausing execution immediately after starting
-- [ ] Rapid pause/resume/cancel clicks
-- [ ] Error recovery after network disconnection
-- [ ] Multiple errors in parallel branches (if applicable)
-
----
-
-## Reporting Issues
-
-If you find bugs or unexpected behavior:
-
-1. **Note the test number** where issue occurred
-2. **Describe what happened** vs what was expected
-3. **Check browser console** for errors (F12 → Console tab)
-4. **Note any error messages** shown in app console
-5. **Document steps to reproduce**
-
----
-
-## Next Steps After Testing
-
-Once testing is complete:
-
-1. ✅ **If all tests pass**: Ready to merge to main
-2. ⚠️ **If minor issues**: Document and continue
-3. ❌ **If major issues**: Review implementation, fix critical bugs
-
-**When ready to merge:**
-```bash
-git checkout main
-git merge phase-1/foundation
-git push origin main
-```
-
----
-
-**Happy Testing! 🚀**
-
-For questions or issues, refer to:
-- `PHASE1_COMPLETE.md` - Implementation summary
-- `CLAUDE.md` - Architecture documentation
-- `README.md` - Project overview
+- [ ] Test 58: Empty Canvas Run
+- [ ] Test 59: Disconnected Nodes
+- [ ] Test 60: Cycle Detection
+- [ ] Test 61: Long Streaming + Auto-Scroll
+- [ ] Test 62: Max Tokens Truncation
+- [ ] Test 63: Multiple Sequential Runs
+- [ ] Test 64: Save Template Disabled State
