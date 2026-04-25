@@ -38,9 +38,9 @@ The application uses a **DAG (Directed Acyclic Graph) execution model**:
 
 1. **Topological Sorting** (`lib/topoSort.ts`): Before execution, nodes are sorted topologically to ensure dependencies execute before dependents. The system detects cycles and prevents execution if found.
 
-2. **Sequential Execution** (`lib/run.ts`): Nodes execute in topological order. Each node:
+2. **Parallel Execution** (`lib/execution/parallel-runner.ts`): Nodes are grouped into levels by `lib/execution/levels.ts`. All nodes within the same level execute concurrently; levels execute in sequence. Each node:
    - Gathers outputs from all incoming edges (dependencies)
-   - Processes its logic (agent, tool, or output)
+   - Processes its logic (agent, tool, router, loop, etc.)
    - Stores its output for downstream nodes
    - Updates UI logs in real-time
 
@@ -48,13 +48,17 @@ The application uses a **DAG (Directed Acyclic Graph) execution model**:
 
 ### Node Types
 
-The system has 6 node types (see `components/nodes/index.tsx`):
+The system has 10 node types (see `components/nodes/index.tsx`):
 
 - **Prompt**: Input node providing initial text/instructions
 - **Document**: File upload node (PDF, TXT, MD, code files) with automatic text extraction
 - **Chunker**: Splits document content into chunks (fixed size or semantic)
 - **Agent**: Executes LLM prompts with a specified model (OpenAI, Anthropic, Google AI, Ollama)
-- **Tool**: Makes HTTP calls or executes functions (currently simulated)
+- **Tool**: Executes real integrations — Web Search (Brave API), HTTP requests, JavaScript code (WebContainers), mock Database queries
+- **Router**: Conditional branching — keyword, sentiment, LLM-as-Judge, or JSON-field strategies
+- **Loop**: Iterates a workflow section up to N times; supports keyword or LLM-judge break conditions
+- **Memory**: Reads/writes named keys in workflow-scoped or global memory (`MemoryManager`)
+- **Human Review**: Pauses execution for manual approval — single or multi-reviewer, approve/reject or edit-and-approve modes
 - **Result**: Terminal node that displays final workflow output
 
 Each node type has its own data structure in `types/`:
@@ -63,62 +67,84 @@ Each node type has its own data structure in `types/`:
 - `types/chunker.ts` - ChunkerData (name, strategy, chunkSize, overlap)
 - `types/agent.ts` - AgentData (name, model, prompt, mode, streaming, temperature, maxTokens)
 - `types/tool.ts` - ToolData (name, kind, config)
+- `types/router.ts` - RouterData (name, strategy, routes, executionState)
+- `types/loop.ts` - LoopData (name, maxIterations, breakCondition, executionState)
+- `types/memory.ts` - MemoryData (name, scope, keys)
+- `types/human-review.ts` - HumanReviewData (name, instructions, mode, multiReview settings)
 - `types/output.ts` - OutputData (name, preview)
+- `types/run.ts` - StoredRun, StoredRunOutput (run history persistence)
+- `types/annotation.ts` - Annotation (thumbs, rating, notes, runId, provider)
+- `types/run-metrics.ts` - NodeMetric, ProviderMetrics, RunStats (observability)
 
 All node types include an `executionState` field ('idle' | 'executing' | 'completed' | 'error') and optional `executionError` for error handling.
 
 ### State Management
 
-Global state lives in `app/page.tsx` using React useState:
-- `nodes`: Array of TypedNode (visual graph nodes)
-- `edges`: Array of Edge (connections between nodes)
-- `selectedId`: Currently selected node ID
-- `logs`: Console output from workflow runs
+Global state is managed by a **Zustand store** at `lib/store/workflow-store.ts` (`useWorkflowStore`). Key slices:
+- `nodes` / `edges`: Workflow graph
+- `executionStatus` / `executionControl`: Run lifecycle ref
+- `logs`: Console output
+- `compareMode` / `compareProviders` / `compareLogs`: Compare mode state
+- `runStats` / `statsOpen`: Observability panel
+- `workflowName`: Editable name displayed in the header
+- `currentError`: Error dialog state
+- `settingsOpen`: Settings modal visibility
 
-The app uses React Flow's built-in state management for viewport interactions (pan, zoom, drag).
+Components read from the store with selectors; `app/page.tsx` calls store actions directly for execution control. The app also uses React Flow's built-in state management for viewport interactions (pan, zoom, drag).
 
 ### Component Organization
 
 ```
 app/
-  layout.tsx       # Root layout with Tailwind/fonts
-  page.tsx         # Main application container with state + execution control
+  layout.tsx            # Root layout with nav bar (Editor | History | Templates)
+  page.tsx              # Main editor — wires store to execution and UI
+  history/page.tsx      # Run history page (StatsBar, TrendCharts, RunTable, RunDetailDrawer)
+  templates/page.tsx    # Template gallery (built-in + user-saved templates)
+  api/runs/             # Run CRUD + stats + export/import API routes
+  api/templates/        # Template CRUD API routes
 
 components/
-  viewport/        # React Flow canvas (drag-and-drop, connections)
-  nodes/           # Node renderers (AgentNode, ToolNode, DocumentNode, ChunkerNode, etc.)
-  palette/         # Left sidebar with draggable node templates
-  properties/      # Right sidebar for editing selected node
-  console/         # Bottom panel showing execution logs with auto-scroll
-  toolbar/         # Top toolbar (Run, Pause, Resume, Cancel, Clear)
-  header.tsx       # Application header with settings and export/import
-  settings/        # Settings modal for API key management
-  error-dialog.tsx # Error recovery dialog (Retry, Skip, Abort)
-  ui/              # shadcn/ui components (button, input, textarea, dialog, etc.)
+  viewport/             # React Flow canvas (drag-and-drop, connections)
+  nodes/                # All 10 node renderers, NodeChrome wrapper
+  palette/              # Left sidebar with draggable node templates
+  properties/           # Right sidebar for editing selected node (per-type panels)
+  console/              # Execution log panel with auto-scroll
+  compare-console/      # N-column compare log panel with word/sentence diff overlay
+  toolbar/              # Top toolbar + CompareControls
+  header.tsx            # Workflow name input + Toolbar
+  settings/             # API key management modal
+  error-dialog.tsx      # Error recovery dialog (Retry, Skip, Abort)
+  observability-panel/  # Collapsible stats panel (per-node latency, tokens, cost)
+  annotation/           # Rating bar (👍/👎, stars, notes) + CSV export
+  templates/            # TemplateCard, SaveTemplateModal
+  ui/                   # shadcn/ui components
 
 lib/
   execution/
-    parallel-runner.ts   # DAG execution engine (primary)
-    levels.ts            # Level grouping for parallel execution
-    route-evaluator.ts   # Router condition evaluation
-  providers/             # LLM provider abstractions
-  document/              # PDF parsing and chunking
-  storage/               # API key management
-  supabase/              # Optional Supabase client
-  topoSort.ts            # Topological sort
-  exportJSON.ts          # Workflow download
-  importJSON.ts          # Workflow file import
-  parseWorkflow.ts       # Pure workflow JSON parsing (testable)
-
-types/
-  index.ts         # Type exports
-  graph.ts         # NodeData, TypedNode, Id types
-  agent.ts         # AgentData with mode, streaming, temperature, maxTokens
-  tool.ts          # ToolData
-  output.ts        # OutputData (ResultNode)
-  prompt.ts        # PromptData
-  document.ts      # DocumentData (file upload and content)
-  chunker.ts       # ChunkerData (chunking strategies)
+    parallel-runner.ts  # DAG execution engine — levels, pause/resume/cancel, metrics
+    levels.ts           # Groups nodes into parallel execution levels
+    compare-runner.ts   # N-provider parallel compare runs
+    route-evaluator.ts  # Router strategy evaluation (keyword, sentiment, LLM-judge, JSON)
+    loop-evaluator.ts   # Loop break condition evaluation
+  providers/            # LLM provider abstractions (OpenAI, Anthropic, Google, Ollama)
+  tools/                # Tool dispatch (web-search, http, code-exec, database)
+  db/                   # SQLite via better-sqlite3 (runs-repo, templates-repo, getDb/migrate)
+  store/
+    workflow-store.ts   # Zustand store (primary app state)
+  diff/
+    word-diff.ts        # LCS-based word-level diff
+    sentence-diff.ts    # LCS-based sentence-level diff
+  document/             # PDF parsing and chunking
+  templates/
+    built-in.ts         # BUILT_IN_TEMPLATES static array (11 entries)
+  storage/              # API key management (localStorage)
+  memory/               # MemoryManager class
+  audit/                # AuditLog class
+  supabase/             # Optional Supabase client
+  topoSort.ts           # Topological sort + cycle detection
+  exportJSON.ts         # Workflow download
+  importJSON.ts         # Workflow file import
+  parseWorkflow.ts      # Pure workflow JSON parsing (testable)
 ```
 
 ### JSON Flow Format
@@ -212,8 +238,8 @@ Always use functional updates for React state to ensure latest state is used.
 5. Create properties panel in `components/properties/your-type-properties.tsx`
 6. Add to properties router in `components/properties/index.tsx`
 7. Add palette item in `components/palette/index.tsx` with appropriate icon
-8. Update `lib/run.ts` execution logic to handle new type
-   - Add case to main execution switch statement
+8. Update `lib/execution/parallel-runner.ts` execution logic to handle new type
+   - Add case to the main node dispatch switch
    - Update node state to 'executing' before processing
    - Update node state to 'completed' or 'error' after processing
    - Handle errors with try/catch and error recovery flow
@@ -221,9 +247,9 @@ Always use functional updates for React state to ensure latest state is used.
 ### Execution Flow Walkthrough
 
 When user clicks "Run":
-1. `run()` in `app/page.tsx` calls `runLib()` from `lib/run.ts`
-2. Logs are cleared, topological sort validates no cycles
-3. For each node in topological order:
+1. `run()` in `app/page.tsx` invokes `runParallel()` from `lib/execution/parallel-runner.ts` (via the Zustand store's `run` action)
+2. Logs are cleared, topological sort validates no cycles, nodes grouped into parallel levels
+3. For each level (concurrent within a level, sequential across levels):
    - Set node state to 'executing' (blue pulsing border)
    - Collect outputs from all incoming edges
    - Execute node logic based on type:
@@ -231,17 +257,17 @@ When user clicks "Run":
      - **Document**: Returns file content (PDF extraction if needed)
      - **Chunker**: Splits input into chunks using chosen strategy
      - **Agent** (Mock): Returns random string
-     - **Agent** (Live): Calls real LLM provider API
-       - Supports streaming (token-by-token display)
-       - Tracks cost and token usage
-       - Handles errors with retry/skip/abort options
-     - **Tool**: Currently returns mock data
+     - **Agent** (Live): Calls real LLM provider API — streaming, cost tracking, error recovery
+     - **Tool**: Dispatches to real integration (web-search, http, code-exec, database)
+     - **Router**: Evaluates routes, executes only the matching branch
+     - **Loop**: Runs the loop body up to maxIterations, checking break condition each pass
+     - **Memory**: Reads or writes named keys via `MemoryManager`
+     - **Human Review**: Pauses execution, waits for reviewer decision in the UI
      - **Result**: Displays final output
    - Store output in `nodeOutputs` map
    - Update node state to 'completed' (green border) or 'error' (red border)
-   - Append logs with color-coded prefixes (🤖 Agent, 📄 Document, etc.)
-   - 200ms delay for visual feedback
-4. "Done" message logged with total cost if any API calls were made
+   - Append logs with color-coded prefixes (🤖 Agent, 📄 Document, 🔀 Router, etc.)
+4. Run auto-saved to SQLite history; "Done" logged with total cost
 
 **Execution Controls:**
 - **Pause**: Sets status to 'paused', completes current node, waits for resume
@@ -271,11 +297,15 @@ The app uses `@xyflow/react` (v12.x) for the visual canvas:
 - **Icons**: lucide-react
 - **Language**: TypeScript 5 (strict mode)
 - **Package Manager**: pnpm
+- **State Management**: Zustand
+- **Database**: better-sqlite3 (local SQLite — run history, templates)
+- **Charts**: recharts (run history trend charts)
 - **LLM SDKs**:
   - `openai` (^6.16.0) - OpenAI API client
   - `@anthropic-ai/sdk` (^0.71.2) - Anthropic API client
   - `@google/generative-ai` (^0.24.1) - Google AI client
 - **Document Processing**: `pdfjs-dist` (^5.4.530) - PDF text extraction
+- **Code Execution**: WebContainers API (in-browser Node.js sandbox)
 
 ## Common Issues & Troubleshooting
 
@@ -307,11 +337,9 @@ The app uses `@xyflow/react` (v12.x) for the visual canvas:
 ## Known Limitations
 
 ### Current Architecture
-- **Sequential execution**: Nodes execute one at a time (parallel planned for Phase 2A)
-- **No loops**: Cannot create workflows that loop back (cycle detection prevents this)
-- **No conditional routing**: All connected nodes execute (router node planned for Phase 2A)
-- **Ephemeral workflows**: Workflows not saved between sessions (import/export available)
-- **Client-side only**: All computation in browser, no backend API
+- **Ephemeral canvas**: Workflow nodes/edges are not persisted between sessions — use Export JSON or Save as Template to preserve work
+- **Run history is local**: SQLite DB lives on the server process; not shared across instances or deployments
+- **No user authentication**: Anyone with browser access can use stored keys and see run history
 
 ### Security & Storage
 - **Plain text API keys**: Keys stored unencrypted in localStorage
@@ -337,8 +365,8 @@ The application supports multiple LLM providers through a unified abstraction la
 
 ### Supported Providers
 1. **OpenAI** (4 models): gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo
-2. **Anthropic** (3 models): claude-opus-4, claude-sonnet-4, claude-haiku-4
-3. **Google AI** (3 models): gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash
+2. **Anthropic** (3 models): claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5
+3. **Google AI** (3 models): gemini-2.0-flash-exp, gemini-1.5-pro, gemini-1.5-flash
 4. **Ollama** (local models): Dynamic model discovery, no API key required
 
 ### Agent Execution Modes
@@ -412,30 +440,35 @@ Memory, human oversight, and audit trail. Key features:
 - **Human Review node**: Single and multi-reviewer support; approval rules (1-of-N, all-must-approve, M-of-N); edit-and-approve mode allowing reviewers to modify content before passing it downstream
 - **Audit Trail**: `AuditLog` class capturing every node execution event; Audit viewer UI with filtering and search; JSON export of the full audit log
 
-### Phase 3 - Complete ✅
-Tool integrations with real execution logic. Key features:
-- **Web Search**: Brave Search API (server-proxied via Next.js API route), configurable result count and domain filters
-- **Code Execution**: WebContainers (in-browser Node.js), runs JavaScript, captures stdout, timeout protection
-- **HTTP Tool**: Generic HTTP client (GET/POST/PUT/DELETE), custom headers, bearer/API key auth
-- **Database Tool**: Mock Postgres query tool returning simulated tabular data
-- **Tool Registry**: Unified tool dispatch system mirroring the provider registry pattern
-- **COOP/COEP headers**: Added for WebContainer cross-origin isolation
+### Phase 3 (Run History) - Complete ✅
+SQLite-backed run history and observability. Key features:
+- **Run auto-save**: Every completed run saved to local SQLite DB
+- **History page** (`/history`): StatsBar, TrendCharts (recharts), RunTable with search/filter/pagination, RunDetailDrawer
+- **Run export/import**: JSON round-trip for sharing runs
+- **ObservabilityPanel**: Per-node timing, token counts, cost per provider (shown via Stats toolbar button)
+- **AnnotationBar**: 👍/👎, 1–5 stars, freetext notes — persisted to localStorage, CSV export
+
+### Phase 4 (Templates) - Complete ✅
+Workflow template system. Key features:
+- **Templates page** (`/templates`): Gallery of 11 built-in templates + user-saved templates
+- **Save as Template**: Toolbar button saves current workflow to SQLite with name and description
+- **TemplateCard**: Node-type badges, load and delete actions
+- **Confirmation dialog**: Warns before replacing a non-empty canvas
+- **Fresh IDs on load**: Node/edge IDs regenerated on each load to prevent collisions
 
 ### Future Phases
-- Phase 4: Workflow templates and UX polish
-- Phase 5: Collaboration features
-- Phase 6: Testing infrastructure
-
-See `docs/implementation-plans/ROADMAP.md` for complete roadmap.
+- **Phase 5**: Collaboration — shareable run URLs, multi-user annotations, Supabase-backed persistence
+- **Phase 6**: E2E testing infrastructure (Playwright) — deferred until product stabilised
 
 ## Development Notes
 
-- All components use `"use client"` directive (client-side rendering)
+- Most components use `"use client"` directive; library modules (lib/) are server-safe
 - Turbopack is enabled for dev and build (faster than Webpack)
-- No backend - all execution happens client-side
-- API keys stored in localStorage (plain text, encryption planned for Phase 2)
-- Mock mode available for all node types (no API keys required)
-- Workflow state is ephemeral (not persisted to localStorage/database)
+- API keys stored in localStorage (plain text — authentication planned for Phase 5)
+- Mock mode available for all agent nodes (no API keys required)
+- Workflow canvas is ephemeral — use Export JSON or Save as Template to persist
+- Run history and templates persist to SQLite via better-sqlite3 (server-side, Next.js API routes)
 - Streaming uses AsyncIterableIterator for memory-efficient token processing
-- Cost tracking uses token counts and pricing table (accurate as of Jan 2025)
-- Execution is currently sequential (parallel execution planned for Phase 2A)
+- Cost tracking uses token counts and pricing table (`lib/providers/pricing.ts`)
+- Independent nodes at the same DAG level execute in parallel (`Promise.allSettled` per level)
+- Compare mode runs the same workflow against N providers concurrently (`runCompare` in `lib/execution/compare-runner.ts`)
